@@ -6,7 +6,6 @@ import javax.annotation.processing.ProcessingEnvironment;
 import javax.annotation.processing.RoundEnvironment;
 import javax.tools.Diagnostic;
 
-import org.springframework.javapoet.ClassName;
 import org.springframework.javapoet.JavaFile;
 import org.springframework.javapoet.TypeSpec;
 
@@ -22,7 +21,6 @@ public class Util {
 	
 	public ProcessingEnvironment processingEnv;
 	public RoundEnvironment roundEnv;
-	public ClassName pageType = ClassName.bestGuess("org.springframework.data.domain.Page");
 
 	public void log(String text) {
 		processingEnv.getMessager().printMessage(Diagnostic.Kind.NOTE, text);

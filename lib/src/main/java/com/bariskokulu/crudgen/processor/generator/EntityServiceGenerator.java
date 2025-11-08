@@ -14,6 +14,7 @@ import org.springframework.javapoet.TypeSpec;
 
 import com.bariskokulu.crudgen.processor.component.EntityElement;
 import com.bariskokulu.crudgen.processor.component.FieldElement;
+import com.bariskokulu.crudgen.util.TypeNames;
 import com.bariskokulu.crudgen.util.Util;
 
 public class EntityServiceGenerator {
@@ -21,7 +22,7 @@ public class EntityServiceGenerator {
 	public static void generate(EntityElement element, Util util) {
 		if(element.getControllerPath().isEmpty() || element.getServiceTypeName() == null) return;
 		TypeSpec.Builder clazz = TypeSpec.classBuilder(element.getServiceName())
-				.addAnnotation(AnnotationSpec.builder(ClassName.bestGuess("org.springframework.stereotype.Service")).build())
+				.addAnnotation(AnnotationSpec.builder(TypeNames.SERVICE).build())
 				.addModifiers(Modifier.PUBLIC);
 		clazz.addField(FieldSpec.builder(element.getRepoTypeName(), "repo", Modifier.PRIVATE, Modifier.FINAL).build());
 		clazz.addMethod(MethodSpec.constructorBuilder().addModifiers(Modifier.PUBLIC)
@@ -41,9 +42,9 @@ public class EntityServiceGenerator {
 				.build());
 		clazz.addMethod(MethodSpec.methodBuilder("get")
 				.addModifiers(Modifier.PUBLIC)
-				.addParameter(ClassName.bestGuess("org.springframework.data.domain.Pageable"), "pageable")
+				.addParameter(TypeNames.PAGEABLE, "pageable")
 				.addStatement("return repo.findAll(pageable)")
-				.returns(ParameterizedTypeName.get(util.pageType, element.getTypeName()))
+				.returns(ParameterizedTypeName.get(TypeNames.PAGE, element.getTypeName()))
 				.build());
 		clazz.addMethod(MethodSpec.methodBuilder("delete")
 				.addModifiers(Modifier.PUBLIC)
@@ -74,9 +75,9 @@ public class EntityServiceGenerator {
 				clazz.addMethod(MethodSpec.methodBuilder("findAllBy"+field.getNameCapitalized())
 						.addModifiers(Modifier.PUBLIC)
 						.addParameter(ClassName.get(field.getType()), field.getName())
-						.addParameter(ClassName.bestGuess("org.springframework.data.domain.Pageable"), "pageable")
+						.addParameter(TypeNames.PAGEABLE, "pageable")
 						.addStatement("return repo.findAllBy$L($L, pageable)", field.getNameCapitalized(), field.getName())
-						.returns(ParameterizedTypeName.get(util.pageType, element.getTypeName()))
+						.returns(ParameterizedTypeName.get(TypeNames.PAGE, element.getTypeName()))
 						.build());
 			}
 		}

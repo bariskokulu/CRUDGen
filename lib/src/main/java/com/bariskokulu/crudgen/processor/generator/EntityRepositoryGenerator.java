@@ -12,29 +12,30 @@ import org.springframework.javapoet.TypeSpec;
 
 import com.bariskokulu.crudgen.processor.component.EntityElement;
 import com.bariskokulu.crudgen.processor.component.FieldElement;
+import com.bariskokulu.crudgen.util.TypeNames;
 import com.bariskokulu.crudgen.util.Util;
 
 public class EntityRepositoryGenerator {
 
 	public static void generate(EntityElement entity, Util util) {
 		TypeSpec.Builder repoClass = TypeSpec.interfaceBuilder(entity.getRepositoryName())
-				.addAnnotation(AnnotationSpec.builder(ClassName.bestGuess("org.springframework.stereotype.Repository")).build())
+				.addAnnotation(AnnotationSpec.builder(TypeNames.REPOSITORY).build())
 				.addModifiers(Modifier.PUBLIC);
 		switch(entity.getRepoType()) {
 		case JPA:
 			repoClass.addSuperinterface(ParameterizedTypeName.get(
-					ClassName.bestGuess("org.springframework.data.jpa.repository.JpaRepository"),
+					TypeNames.JPA_REPOSITORY,
 					entity.getTypeName(),
 					entity.getIdTypeName()
 					))
 			.addSuperinterface(ParameterizedTypeName.get(
-					ClassName.bestGuess("org.springframework.data.jpa.repository.JpaSpecificationExecutor"),
+					TypeNames.JPA_SPEC_EXECUTOR,
 					entity.getTypeName()
 					));
 			break;
 		case MONGO:
 			repoClass.addSuperinterface(ParameterizedTypeName.get(
-					ClassName.bestGuess("org.springframework.data.mongodb.repository.MongoRepository"),
+					TypeNames.MONGO_REPOSITORY,
 					entity.getTypeName()
 					));
 			break;
@@ -56,8 +57,8 @@ public class EntityRepositoryGenerator {
 				repoClass.addMethod(MethodSpec.methodBuilder("findAllBy"+field.getNameCapitalized())
 						.addModifiers(Modifier.PUBLIC, Modifier.ABSTRACT)
 						.addParameter(ClassName.get(field.getType()), field.getName())
-						.addParameter(ClassName.bestGuess("org.springframework.data.domain.Pageable"), "pageable")
-						.returns(ParameterizedTypeName.get(util.pageType, entity.getTypeName()))
+						.addParameter(TypeNames.PAGEABLE, "pageable")
+						.returns(ParameterizedTypeName.get(TypeNames.PAGE, entity.getTypeName()))
 						.build());
 			}
 		}

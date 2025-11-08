@@ -15,14 +15,15 @@ import org.springframework.javapoet.TypeSpec;
 import com.bariskokulu.crudgen.processor.component.EndpointElement;
 import com.bariskokulu.crudgen.processor.component.ParameterElement;
 import com.bariskokulu.crudgen.processor.component.UseCaseServiceElement;
+import com.bariskokulu.crudgen.util.TypeNames;
 import com.bariskokulu.crudgen.util.Util;
 
 public class UseCaseControllerGenerator {
 
 	public static void generate(UseCaseServiceElement service, Util util) {
 		TypeSpec.Builder clazz = TypeSpec.classBuilder(service.getControllerName() != null && !service.getControllerName().isEmpty() ? service.getControllerName() : service.getName()+"Controller")
-				.addAnnotation(AnnotationSpec.builder(ClassName.bestGuess("org.springframework.stereotype.Controller")).build())
-				.addAnnotation(AnnotationSpec.builder(ClassName.bestGuess("org.springframework.web.bind.annotation.RequestMapping")).addMember("value", "$S", service.getPath()).build())
+				.addAnnotation(AnnotationSpec.builder(TypeNames.CONTROLLER).build())
+				.addAnnotation(AnnotationSpec.builder(TypeNames.REQUEST_MAPPING).addMember("value", "$S", service.getPath()).build())
 				.addModifiers(Modifier.PUBLIC);
 		clazz.addMethod(MethodSpec.constructorBuilder().addModifiers(Modifier.PUBLIC).addParameter(service.getTypeName(), "service").addStatement("this.service = service").build());
 		clazz.addField(FieldSpec.builder(service.getTypeName(), "service", Modifier.PRIVATE, Modifier.FINAL).build());
@@ -37,8 +38,8 @@ public class UseCaseControllerGenerator {
 				paramString.append(", "+param.getName());
 			}
 			if(endpoint.getReturnType() != null) {
-				method.addStatement("return $T.ok(service.$L($L))", ClassName.bestGuess("org.springframework.http.ResponseEntity"), endpoint.getName(), paramString.append("  ").substring(2));
-				method.returns(ParameterizedTypeName.get(ClassName.bestGuess("org.springframework.http.ResponseEntity"), ClassName.get(endpoint.getReturnType())));
+				method.addStatement("return $T.ok(service.$L($L))", TypeNames.RESPONSE_ENTITY, endpoint.getName(), paramString.append("  ").substring(2));
+				method.returns(ParameterizedTypeName.get(TypeNames.RESPONSE_ENTITY, ClassName.get(endpoint.getReturnType())));
 			} else {
 				method.addStatement("service.$L($L)", endpoint.getName(), paramString.append("  ").substring(2));
 			}

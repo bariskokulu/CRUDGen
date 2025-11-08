@@ -11,13 +11,14 @@ import org.springframework.javapoet.TypeSpec;
 
 import com.bariskokulu.crudgen.processor.component.DTOElement;
 import com.bariskokulu.crudgen.processor.component.EntityElement;
+import com.bariskokulu.crudgen.util.TypeNames;
 import com.bariskokulu.crudgen.util.Util;
 
 public class EntityMapperGenerator {
 
 	public static void generate(EntityElement element, Util util) {
 		TypeSpec.Builder clazz = TypeSpec.interfaceBuilder(element.getMapperName())
-				.addAnnotation(AnnotationSpec.builder(ClassName.bestGuess("org.mapstruct.Mapper")).build())
+				.addAnnotation(AnnotationSpec.builder(TypeNames.MAPPER).build())
 				.addModifiers(Modifier.PUBLIC);
 		clazz.addMethod(MethodSpec.methodBuilder("get").addModifiers(Modifier.PUBLIC, Modifier.ABSTRACT)
 				.addParameter(element.getTypeName(), "entity")
@@ -36,8 +37,8 @@ public class EntityMapperGenerator {
 					.returns(dto.getTypeName())
 					.build());
 			clazz.addMethod(MethodSpec.methodBuilder("patch").addModifiers(Modifier.PUBLIC, Modifier.ABSTRACT)
-					.addAnnotation(AnnotationSpec.builder(ClassName.bestGuess("org.mapstruct.BeanMapping")).addMember("nullValuePropertyMappingStrategy", "$T.$L", ClassName.bestGuess("org.mapstruct.NullValuePropertyMappingStrategy"), "SET_TO_NULL").build())
-					.addParameter(ParameterSpec.builder(element.getTypeName(), "entity").addAnnotation(AnnotationSpec.builder(ClassName.bestGuess("org.mapstruct.MappingTarget")).build()).build())
+					.addAnnotation(AnnotationSpec.builder(TypeNames.BEAN_MAPPING).addMember("nullValuePropertyMappingStrategy", "$T.$L", TypeNames.NULL_STRATEGY, "SET_TO_NULL").build())
+					.addParameter(ParameterSpec.builder(element.getTypeName(), "entity").addAnnotation(AnnotationSpec.builder(TypeNames.MAPPING_TARGET).build()).build())
 					.addParameter(dto.getTypeName(), "dto")
 					.build());
 		}

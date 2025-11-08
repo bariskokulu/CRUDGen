@@ -6,7 +6,7 @@ plugins {
 }
 
 group = "io.github.bariskokulu"
-version = "1.0.0"
+version = "1.0.1"
 val artifactId = "crudgen"
 
 repositories {
@@ -49,12 +49,15 @@ mavenPublishing {
     coordinates(group.toString(), artifactId, version.toString())
     publishToMavenCentral()
    
-   // publishToMavenCentral(
+  //  publishToMavenCentral(
    //     com.vanniktech.maven.publish.central.CentralPortal(
    //         username = providers.gradleProperty("mavenCentralUsername").orElse(""),
    //         password = providers.gradleProperty("mavenCentralPassword").orElse("")
    //     )
    // )
+	
+	  
+  //  publishToMavenCentral(SonatypeHost.DEFAULT)
    
     signAllPublications()
     pom {
