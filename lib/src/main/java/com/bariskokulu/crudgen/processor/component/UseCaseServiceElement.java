@@ -7,11 +7,10 @@ import javax.lang.model.element.Element;
 import javax.lang.model.element.ElementKind;
 import javax.lang.model.element.ExecutableElement;
 
-import org.springframework.javapoet.ClassName;
-import org.springframework.javapoet.TypeName;
-
 import com.bariskokulu.crudgen.annotation.EndpointGen;
 import com.bariskokulu.crudgen.annotation.http.Endpoint;
+import com.squareup.javapoet.ClassName;
+import com.squareup.javapoet.TypeName;
 
 import lombok.Getter;
 

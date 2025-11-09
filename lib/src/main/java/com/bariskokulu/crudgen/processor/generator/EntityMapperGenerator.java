@@ -3,16 +3,14 @@ package com.bariskokulu.crudgen.processor.generator;
 
 import javax.lang.model.element.Modifier;
 
-import org.springframework.javapoet.AnnotationSpec;
-import org.springframework.javapoet.ClassName;
-import org.springframework.javapoet.MethodSpec;
-import org.springframework.javapoet.ParameterSpec;
-import org.springframework.javapoet.TypeSpec;
-
 import com.bariskokulu.crudgen.processor.component.DTOElement;
 import com.bariskokulu.crudgen.processor.component.EntityElement;
 import com.bariskokulu.crudgen.util.TypeNames;
 import com.bariskokulu.crudgen.util.Util;
+import com.squareup.javapoet.AnnotationSpec;
+import com.squareup.javapoet.MethodSpec;
+import com.squareup.javapoet.ParameterSpec;
+import com.squareup.javapoet.TypeSpec;
 
 public class EntityMapperGenerator {
 

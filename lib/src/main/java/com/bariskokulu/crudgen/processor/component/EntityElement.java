@@ -10,11 +10,10 @@ import javax.lang.model.element.Element;
 import javax.lang.model.element.ElementKind;
 import javax.lang.model.element.TypeElement;
 
-import org.springframework.javapoet.ClassName;
-import org.springframework.javapoet.TypeName;
-
 import com.bariskokulu.crudgen.annotation.CrudGen;
 import com.bariskokulu.crudgen.util.RepoType;
+import com.squareup.javapoet.ClassName;
+import com.squareup.javapoet.TypeName;
 
 import lombok.Getter;
 

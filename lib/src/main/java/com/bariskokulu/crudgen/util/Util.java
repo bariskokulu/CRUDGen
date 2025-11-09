@@ -6,8 +6,8 @@ import javax.annotation.processing.ProcessingEnvironment;
 import javax.annotation.processing.RoundEnvironment;
 import javax.tools.Diagnostic;
 
-import org.springframework.javapoet.JavaFile;
-import org.springframework.javapoet.TypeSpec;
+import com.squareup.javapoet.JavaFile;
+import com.squareup.javapoet.TypeSpec;
 
 
 public class Util {

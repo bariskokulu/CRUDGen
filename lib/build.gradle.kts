@@ -6,7 +6,7 @@ plugins {
 }
 
 group = "io.github.bariskokulu"
-version = "1.0.1"
+version = "1.0.2"
 val artifactId = "crudgen"
 
 repositories {
@@ -16,20 +16,22 @@ repositories {
 dependencies {
     compileOnly("org.projectlombok:lombok:1.18.42")
     annotationProcessor("org.projectlombok:lombok:1.18.42")
+    
+	implementation("com.squareup:javapoet:1.13.0")
 
-    implementation("org.springframework.boot:spring-boot-starter-validation:3.5.7")
-    annotationProcessor("org.springframework.boot:spring-boot-configuration-processor:3.5.7")
-    implementation("org.springframework.boot:spring-boot-starter-data-jpa:3.5.7")
-    implementation("org.springframework.boot:spring-boot-starter-web:3.5.7")
+   // implementation("org.springframework.boot:spring-boot-starter-validation:3.5.7")
+   //  annotationProcessor("org.springframework.boot:spring-boot-configuration-processor:3.5.7")
+   //  implementation("org.springframework.boot:spring-boot-starter-data-jpa:3.5.7")
+   //  implementation("org.springframework.boot:spring-boot-starter-web:3.5.7")
 
     compileOnly("com.google.auto.service:auto-service:1.1.1")
     annotationProcessor("com.google.auto.service:auto-service:1.1.1")
 
-    implementation("org.mapstruct:mapstruct:1.6.3")
-    annotationProcessor("org.mapstruct:mapstruct-processor:1.6.3")
-    annotationProcessor("org.projectlombok:lombok-mapstruct-binding:0.2.0")
+   // implementation("org.mapstruct:mapstruct:1.6.3")
+  //  annotationProcessor("org.mapstruct:mapstruct-processor:1.6.3")
+   // annotationProcessor("org.projectlombok:lombok-mapstruct-binding:0.2.0")
 
-    implementation("io.github.vishwakarma:zjsonpatch:0.5.0")
+   //  implementation("io.github.vishwakarma:zjsonpatch:0.5.0")
 }
 
 java {

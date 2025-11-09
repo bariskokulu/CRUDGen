@@ -8,9 +8,8 @@ import java.util.stream.Collectors;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ElementKind;
 
-import org.springframework.javapoet.ClassName;
-
 import com.bariskokulu.crudgen.annotation.http.DTOField;
+import com.squareup.javapoet.ClassName;
 
 import lombok.Getter;
 

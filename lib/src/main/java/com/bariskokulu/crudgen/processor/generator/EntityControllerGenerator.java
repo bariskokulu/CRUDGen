@@ -6,19 +6,18 @@ import java.util.stream.Collectors;
 
 import javax.lang.model.element.Modifier;
 
-import org.springframework.javapoet.AnnotationSpec;
-import org.springframework.javapoet.ClassName;
-import org.springframework.javapoet.FieldSpec;
-import org.springframework.javapoet.MethodSpec;
-import org.springframework.javapoet.ParameterSpec;
-import org.springframework.javapoet.ParameterizedTypeName;
-import org.springframework.javapoet.TypeSpec;
-
 import com.bariskokulu.crudgen.processor.component.DTOElement;
 import com.bariskokulu.crudgen.processor.component.EntityElement;
 import com.bariskokulu.crudgen.processor.component.FieldElement;
 import com.bariskokulu.crudgen.util.TypeNames;
 import com.bariskokulu.crudgen.util.Util;
+import com.squareup.javapoet.AnnotationSpec;
+import com.squareup.javapoet.ClassName;
+import com.squareup.javapoet.FieldSpec;
+import com.squareup.javapoet.MethodSpec;
+import com.squareup.javapoet.ParameterSpec;
+import com.squareup.javapoet.ParameterizedTypeName;
+import com.squareup.javapoet.TypeSpec;
 
 public class EntityControllerGenerator {
 
@@ -48,7 +47,9 @@ public class EntityControllerGenerator {
 				.addAnnotation(AnnotationSpec.builder(TypeNames.GET_MAPPING).addMember("value", "$S", "/{id}").build())
 				.addModifiers(Modifier.PUBLIC)
 				.addParameter(ParameterSpec.builder(element.getIdTypeName(), "id").addAnnotation(AnnotationSpec.builder(TypeNames.PATH_VARIABLE).build()).build())
-				.addStatement("return $T.ok(mapper.get(service.get(id)))", TypeNames.RESPONSE_ENTITY)
+				.addStatement("$T entity = service.get(id)", element.getTypeName())
+				.addStatement("if(entity == null) throw new $T($T.NOT_FOUND, \"Entity with id \"+ id + \" not found.\")", TypeNames.RESOURCE_STATUS_EXCEPTION, TypeNames.HTTP_STATUS)
+				.addStatement("return $T.ok(mapper.get(entity))", TypeNames.RESPONSE_ENTITY)
 				.returns(ParameterizedTypeName.get(TypeNames.RESPONSE_ENTITY, returnDtoTypeName))
 				.build());
 		
@@ -62,8 +63,8 @@ public class EntityControllerGenerator {
 		clazz.addMethod(MethodSpec.methodBuilder("get")
 				.addAnnotation(AnnotationSpec.builder(TypeNames.GET_MAPPING).addMember("value", "$S", "/paged").build())
 				.addModifiers(Modifier.PUBLIC)
-				.addParameter(ParameterSpec.builder(ClassName.get(Integer.class).unbox(), "page").addAnnotation(TypeNames.REQUEST_PARAM).build())
-				.addParameter(ParameterSpec.builder(ClassName.get(Integer.class).unbox(), "size").addAnnotation(TypeNames.REQUEST_PARAM).build())
+				.addParameter(ParameterSpec.builder(ClassName.get(Integer.class).unbox(), "page").addAnnotation(TypeNames.REQUEST_PARAM).addAnnotation(AnnotationSpec.builder(TypeNames.MIN).addMember("value", "0").build()).build())
+				.addParameter(ParameterSpec.builder(ClassName.get(Integer.class).unbox(), "size").addAnnotation(TypeNames.REQUEST_PARAM).addAnnotation(AnnotationSpec.builder(TypeNames.MIN).addMember("value", "0").build()).build())
 				.addStatement("return $T.ok(service.get($T.of(page, size)).map(t -> mapper.get(t)))", TypeNames.RESPONSE_ENTITY, TypeNames.PAGE_REQUEST)
 				.returns(ParameterizedTypeName.get(TypeNames.RESPONSE_ENTITY, ParameterizedTypeName.get(TypeNames.PAGE, returnDtoTypeName)))
 				.build());
@@ -90,6 +91,7 @@ public class EntityControllerGenerator {
 					.addParameter(ParameterSpec.builder(element.getIdTypeName(), "id").addAnnotation(AnnotationSpec.builder(TypeNames.PATH_VARIABLE).build()).build())
 					.addParameter(ParameterSpec.builder(TypeNames.JSON_NODE, "body").addAnnotation(TypeNames.REQUEST_BODY).build())
 					.addStatement("$T existing = service.get(id)", element.getTypeName())
+					.addStatement("if(existing == null) throw new $T($T.NOT_FOUND, \"Entity with id \"+ id + \" not found.\")", TypeNames.RESOURCE_STATUS_EXCEPTION, TypeNames.HTTP_STATUS)
 					.addStatement("$T patchedDto", dto.getTypeName())
 					.addCode("try {\n")
 					.addStatement("patchedDto = objectMapper.treeToValue($T.apply(body, objectMapper.valueToTree(mapper.toPatch(existing))), $T.class)", TypeNames.JSON_PATCH, dto.getTypeName())
@@ -97,7 +99,7 @@ public class EntityControllerGenerator {
 					.addStatement("throw new $T(\"Invalid patch\", e)", IllegalArgumentException.class)
 					.addCode("}\n")
 					.addStatement("$T violations = validator.validate(patchedDto)", ParameterizedTypeName.get(ClassName.get(Set.class), ParameterizedTypeName.get(TypeNames.CONSTRAINT_VIOLATION, dto.getTypeName())))
-					.addStatement("if(!violations.isEmpty()) throw new $T(violations)", TypeNames.CONSTRAINT_VIOLATION)
+					.addStatement("if(!violations.isEmpty()) throw new $T(violations)", TypeNames.CONSTRAINT_EXCEPTION)
 					.addStatement("mapper.patch(existing, patchedDto)")
 					.addStatement("return $T.ok(mapper.get(service.save(existing)))", TypeNames.RESPONSE_ENTITY)
 					.returns(ParameterizedTypeName.get(TypeNames.RESPONSE_ENTITY, returnDtoTypeName))
@@ -125,8 +127,8 @@ public class EntityControllerGenerator {
 						.addAnnotation(AnnotationSpec.builder(TypeNames.GET_MAPPING).addMember("value", "$S", "/findAllBy"+field.getNameCapitalized()+"/paged").build())
 						.addModifiers(Modifier.PUBLIC)
 						.addParameter(ParameterSpec.builder(ClassName.get(field.getType()), field.getName()).addAnnotation(TypeNames.REQUEST_PARAM).build())
-						.addParameter(ParameterSpec.builder(ClassName.get(Integer.class).unbox(), "page").addAnnotation(TypeNames.REQUEST_PARAM).build())
-						.addParameter(ParameterSpec.builder(ClassName.get(Integer.class).unbox(), "size").addAnnotation(TypeNames.REQUEST_PARAM).build())
+						.addParameter(ParameterSpec.builder(ClassName.get(Integer.class).unbox(), "page").addAnnotation(TypeNames.REQUEST_PARAM).addAnnotation(AnnotationSpec.builder(TypeNames.MIN).addMember("value", "0").build()).build())
+						.addParameter(ParameterSpec.builder(ClassName.get(Integer.class).unbox(), "size").addAnnotation(TypeNames.REQUEST_PARAM).addAnnotation(AnnotationSpec.builder(TypeNames.MIN).addMember("value", "0").build()).build())
 						.addStatement("return $T.ok(service.findAllBy$L($L, $T.of(page, size)).map(t -> mapper.get(t)))", TypeNames.RESPONSE_ENTITY, field.getNameCapitalized(), field.getName(), TypeNames.PAGE_REQUEST)
 						.returns(ParameterizedTypeName.get(TypeNames.RESPONSE_ENTITY, ParameterizedTypeName.get(TypeNames.PAGE, returnDtoTypeName)))
 						.build());

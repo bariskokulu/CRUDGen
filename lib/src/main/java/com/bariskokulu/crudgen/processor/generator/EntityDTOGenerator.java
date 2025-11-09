@@ -6,16 +6,15 @@ import java.util.stream.Collectors;
 import javax.lang.model.element.Modifier;
 import javax.lang.model.element.TypeElement;
 
-import org.springframework.javapoet.AnnotationSpec;
-import org.springframework.javapoet.ClassName;
-import org.springframework.javapoet.FieldSpec;
-import org.springframework.javapoet.MethodSpec;
-import org.springframework.javapoet.ParameterSpec;
-import org.springframework.javapoet.TypeSpec;
-
 import com.bariskokulu.crudgen.processor.component.DTOElement;
 import com.bariskokulu.crudgen.processor.component.EntityElement;
 import com.bariskokulu.crudgen.util.Util;
+import com.squareup.javapoet.AnnotationSpec;
+import com.squareup.javapoet.ClassName;
+import com.squareup.javapoet.FieldSpec;
+import com.squareup.javapoet.MethodSpec;
+import com.squareup.javapoet.ParameterSpec;
+import com.squareup.javapoet.TypeSpec;
 
 public class EntityDTOGenerator {
 

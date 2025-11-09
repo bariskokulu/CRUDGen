@@ -1,6 +1,6 @@
 package com.bariskokulu.crudgen.util;
 
-import org.springframework.javapoet.ClassName;
+import com.squareup.javapoet.ClassName;
 
 public class TypeNames {
 
@@ -33,5 +33,10 @@ public class TypeNames {
 	public static final ClassName PAGEABLE = ClassName.bestGuess("org.springframework.data.domain.Pageable");
 	public static final ClassName SERVICE = ClassName.bestGuess("org.springframework.stereotype.Service");
 	public static final ClassName CONTROLLER = ClassName.bestGuess("org.springframework.stereotype.Controller");
+	public static final ClassName RESOURCE_STATUS_EXCEPTION = ClassName.bestGuess("org.springframework.web.server.ResponseStatusException");
+	public static final ClassName HTTP_STATUS = ClassName.bestGuess("org.springframework.http.HttpStatus");
+	public static final ClassName MIN = ClassName.bestGuess("jakarta.validation.constraints.Min");
+	public static final ClassName MAX = ClassName.bestGuess("jakarta.validation.constraints.Max");
+	public static final ClassName CONSTRAINT_EXCEPTION = ClassName.bestGuess("jakarta.validation.ConstraintViolationException");
 	
 }
