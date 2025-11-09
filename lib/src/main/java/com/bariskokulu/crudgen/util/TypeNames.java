@@ -38,5 +38,6 @@ public class TypeNames {
 	public static final ClassName MIN = ClassName.bestGuess("jakarta.validation.constraints.Min");
 	public static final ClassName MAX = ClassName.bestGuess("jakarta.validation.constraints.Max");
 	public static final ClassName CONSTRAINT_EXCEPTION = ClassName.bestGuess("jakarta.validation.ConstraintViolationException");
+	public static final ClassName TRANSACTIONAL = ClassName.bestGuess("org.springframework.transaction.annotation.Transactional");
 	
 }

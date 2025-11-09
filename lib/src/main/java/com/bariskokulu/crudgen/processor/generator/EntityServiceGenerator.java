@@ -2,6 +2,7 @@ package com.bariskokulu.crudgen.processor.generator;
 
 import java.util.List;
 
+import javax.annotation.processing.ProcessingEnvironment;
 import javax.lang.model.element.Modifier;
 
 import com.bariskokulu.crudgen.processor.component.EntityElement;
@@ -18,7 +19,7 @@ import com.squareup.javapoet.TypeSpec;
 
 public class EntityServiceGenerator {
 
-	public static void generate(EntityElement element, Util util) {
+	public static void generate(EntityElement element, ProcessingEnvironment processingEnv) {
 		if(element.getControllerPath().isEmpty() || element.getServiceTypeName() == null) return;
 		TypeSpec.Builder clazz = TypeSpec.classBuilder(element.getServiceName())
 				.addAnnotation(AnnotationSpec.builder(TypeNames.SERVICE).build())
@@ -46,11 +47,13 @@ public class EntityServiceGenerator {
 				.returns(ParameterizedTypeName.get(TypeNames.PAGE, element.getTypeName()))
 				.build());
 		clazz.addMethod(MethodSpec.methodBuilder("delete")
+				.addAnnotation(TypeNames.TRANSACTIONAL)
 				.addModifiers(Modifier.PUBLIC)
 				.addParameter(element.getIdTypeName(), "id")
 				.addStatement("repo.deleteById(id)")
 				.build());
 		clazz.addMethod(MethodSpec.methodBuilder("save").addModifiers(Modifier.PUBLIC)
+				.addAnnotation(TypeNames.TRANSACTIONAL)
 				.addParameter(ParameterSpec.builder(element.getTypeName(), "entity").build())
 				.addStatement("return repo.save(entity)")
 				.returns(element.getTypeName())
@@ -80,7 +83,7 @@ public class EntityServiceGenerator {
 						.build());
 			}
 		}
-		util.saveFile("com.bariskokulu.crudgen", clazz.build());
+		Util.saveFile(element.getPackageName(), clazz.build(), processingEnv);
 	}
 
 }

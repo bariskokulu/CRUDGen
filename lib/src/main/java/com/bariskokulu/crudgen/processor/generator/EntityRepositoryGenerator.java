@@ -2,6 +2,7 @@ package com.bariskokulu.crudgen.processor.generator;
 
 import java.util.List;
 
+import javax.annotation.processing.ProcessingEnvironment;
 import javax.lang.model.element.Modifier;
 
 import com.bariskokulu.crudgen.processor.component.EntityElement;
@@ -16,52 +17,56 @@ import com.squareup.javapoet.TypeSpec;
 
 public class EntityRepositoryGenerator {
 
-	public static void generate(EntityElement entity, Util util) {
-		TypeSpec.Builder repoClass = TypeSpec.interfaceBuilder(entity.getRepositoryName())
+	public static void generate(EntityElement element, ProcessingEnvironment processingEnv) {
+		TypeSpec.Builder clazz = TypeSpec.interfaceBuilder(element.getRepositoryName())
 				.addAnnotation(AnnotationSpec.builder(TypeNames.REPOSITORY).build())
 				.addModifiers(Modifier.PUBLIC);
-		switch(entity.getRepoType()) {
-		case JPA:
-			repoClass.addSuperinterface(ParameterizedTypeName.get(
-					TypeNames.JPA_REPOSITORY,
-					entity.getTypeName(),
-					entity.getIdTypeName()
-					))
-			.addSuperinterface(ParameterizedTypeName.get(
-					TypeNames.JPA_SPEC_EXECUTOR,
-					entity.getTypeName()
-					));
-			break;
-		case MONGO:
-			repoClass.addSuperinterface(ParameterizedTypeName.get(
-					TypeNames.MONGO_REPOSITORY,
-					entity.getTypeName()
-					));
-			break;
+		if(element.getCustomRepoTypeName() != null) {
+			clazz.addSuperinterface(element.getCustomRepoTypeName());
+		} else {
+			switch(element.getRepoType()) {
+			case JPA:
+				clazz.addSuperinterface(ParameterizedTypeName.get(
+						TypeNames.JPA_REPOSITORY,
+						element.getTypeName(),
+						element.getIdTypeName()
+						))
+				.addSuperinterface(ParameterizedTypeName.get(
+						TypeNames.JPA_SPEC_EXECUTOR,
+						element.getTypeName()
+						));
+				break;
+			case MONGO:
+				clazz.addSuperinterface(ParameterizedTypeName.get(
+						TypeNames.MONGO_REPOSITORY,
+						element.getTypeName()
+						));
+				break;
+			}
 		}
-		for(FieldElement field : entity.getFields()) {
+		for(FieldElement field : element.getFields()) {
 			if(field.isFindBy()) {
-				repoClass.addMethod(MethodSpec.methodBuilder("findBy"+field.getNameCapitalized())
+				clazz.addMethod(MethodSpec.methodBuilder("findBy"+field.getNameCapitalized())
 						.addModifiers(Modifier.PUBLIC, Modifier.ABSTRACT)
 						.addParameter(ClassName.get(field.getType()), field.getName())
-						.returns(entity.getTypeName())
+						.returns(element.getTypeName())
 						.build());
 			}
 			if(field.isFindAllBy()) {
-				repoClass.addMethod(MethodSpec.methodBuilder("findAllBy"+field.getNameCapitalized())
+				clazz.addMethod(MethodSpec.methodBuilder("findAllBy"+field.getNameCapitalized())
 						.addModifiers(Modifier.PUBLIC, Modifier.ABSTRACT)
 						.addParameter(ClassName.get(field.getType()), field.getName())
-						.returns(ParameterizedTypeName.get(ClassName.get(List.class), entity.getTypeName()))
+						.returns(ParameterizedTypeName.get(ClassName.get(List.class), element.getTypeName()))
 						.build());
-				repoClass.addMethod(MethodSpec.methodBuilder("findAllBy"+field.getNameCapitalized())
+				clazz.addMethod(MethodSpec.methodBuilder("findAllBy"+field.getNameCapitalized())
 						.addModifiers(Modifier.PUBLIC, Modifier.ABSTRACT)
 						.addParameter(ClassName.get(field.getType()), field.getName())
 						.addParameter(TypeNames.PAGEABLE, "pageable")
-						.returns(ParameterizedTypeName.get(TypeNames.PAGE, entity.getTypeName()))
+						.returns(ParameterizedTypeName.get(TypeNames.PAGE, element.getTypeName()))
 						.build());
 			}
 		}
-		util.saveFile("com.bariskokulu.crudgen", repoClass.build());
+		Util.saveFile(element.getPackageName(), clazz.build(), processingEnv);
 	}
 
 }

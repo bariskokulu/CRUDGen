@@ -12,35 +12,30 @@ import com.squareup.javapoet.TypeSpec;
 
 public class Util {
 
-	private static Util instance;
-	
-	public static Util instance() {
-		if(instance == null) instance = new Util();
-		return instance;
-	}
-	
 	public ProcessingEnvironment processingEnv;
 	public RoundEnvironment roundEnv;
 
-	public void log(String text) {
+	public static void log(String text, ProcessingEnvironment processingEnv) {
 		processingEnv.getMessager().printMessage(Diagnostic.Kind.NOTE, text);
 	}
 
-	public void warn(String text) {
+	public static void warn(String text, ProcessingEnvironment processingEnv) {
 		processingEnv.getMessager().printMessage(Diagnostic.Kind.WARNING, text);
 	}
 
-	public void error(String text) {
+	public static void error(String text, ProcessingEnvironment processingEnv) {
 		processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, text);
 	}
 
-	public void saveFile(String path, TypeSpec typeSpec) {
+	public static void saveFile(String path, TypeSpec typeSpec, ProcessingEnvironment processingEnv) {
 		JavaFile javaFile = JavaFile.builder(path, typeSpec).build();
+		
+		// yes this is necessary because otherwise it somehow conflicts with classes generated in the previous build ( not the previous processing round )
 		javaFile.toJavaFileObject().delete();
 		try {
 			javaFile.writeTo(processingEnv.getFiler());
 		} catch (IOException e) {
-			error("Failed to save file: "+path);
+			error("Failed to save file: "+path, processingEnv);
 			e.printStackTrace();
 		}
 	}

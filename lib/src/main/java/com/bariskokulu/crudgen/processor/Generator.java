@@ -1,5 +1,6 @@
 package com.bariskokulu.crudgen.processor;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -36,31 +37,41 @@ public class Generator extends AbstractProcessor {
 
 	private List<EntityElement> entityElements;
 	private List<UseCaseServiceElement> serviceElements;
+	private HashSet<String> processedElements = new HashSet<String>();
 
 	@Override
 	public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
-		Util util = Util.instance();
-		util.processingEnv = processingEnv;
-		util.roundEnv = roundEnv;
 		if (roundEnv.processingOver()) {
-			util.warn("Processing is over.");
+			Util.warn("Processing is over.", processingEnv);
 			return false;
 		}
 		entityElements = roundEnv.getElementsAnnotatedWith(CrudGen.class).stream()
 				.filter(e -> e.getKind() == ElementKind.CLASS)
-				.map(e -> new EntityElement(e))
+				.filter(e -> !processedElements.contains(((TypeElement) e).getQualifiedName().toString()))
+				.map(e -> new EntityElement(e, processingEnv))
+				.filter(e -> !e.isInvalid())
 				.collect(Collectors.toList());
 		serviceElements = roundEnv.getElementsAnnotatedWith(EndpointGen.class).stream()
 				.filter(e -> e.getKind() == ElementKind.CLASS)
+				.filter(e -> !processedElements.contains(((TypeElement) e).getQualifiedName().toString()))
 				.map(e -> new UseCaseServiceElement(e))
+				.filter(e -> !e.isInvalid())
 				.collect(Collectors.toList());
-		entityElements.forEach(e -> EntityDTOGenerator.generate(e, util));
-		entityElements.forEach(e -> EntityMapperGenerator.generate(e, util));
-		entityElements.forEach(e -> EntityRepositoryGenerator.generate(e, util));
-		entityElements.forEach(e -> EntityServiceGenerator.generate(e, util));
-		entityElements.forEach(e -> EntityControllerGenerator.generate(e, util));
-		serviceElements.forEach(e -> UseCaseControllerGenerator.generate(e, util));
-		return true;
+		entityElements.forEach(e -> EntityDTOGenerator.generate(e, processingEnv));
+		entityElements.forEach(e -> EntityMapperGenerator.generate(e, processingEnv));
+		entityElements.forEach(e -> EntityRepositoryGenerator.generate(e, processingEnv));
+		entityElements.forEach(e -> EntityServiceGenerator.generate(e, processingEnv));
+		entityElements.forEach(e -> EntityControllerGenerator.generate(e, processingEnv));
+		serviceElements.forEach(e -> UseCaseControllerGenerator.generate(e, processingEnv));
+
+		processedElements.addAll(entityElements.stream().map(t -> t.getElement().getQualifiedName().toString()).collect(Collectors.toList()));
+		processedElements.addAll(serviceElements.stream().map(t -> t.getElement().getQualifiedName().toString()).collect(Collectors.toList()));
+		return false;
+	}
+	
+	@Override
+	public SourceVersion getSupportedSourceVersion() {
+		return SourceVersion.latestSupported();
 	}
 
 }

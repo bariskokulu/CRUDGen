@@ -3,6 +3,7 @@ package com.bariskokulu.crudgen.processor.generator;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import javax.annotation.processing.ProcessingEnvironment;
 import javax.lang.model.element.Modifier;
 import javax.lang.model.element.TypeElement;
 
@@ -18,13 +19,13 @@ import com.squareup.javapoet.TypeSpec;
 
 public class EntityDTOGenerator {
 
-	public static void generate(EntityElement element, Util util) {
+	public static void generate(EntityElement element, ProcessingEnvironment processingEnv) {
 		for(Map.Entry<String, DTOElement> dto : element.getDtos().entrySet()) {
-			generateOne(dto.getValue(), util);
+			generateOne(element, dto.getValue(), processingEnv);
 		}
 	}
 
-	private static void generateOne(DTOElement dtoElement, Util util) {
+	private static void generateOne(EntityElement element, DTOElement dtoElement, ProcessingEnvironment processingEnv) {
 		TypeSpec.Builder clazz = TypeSpec.classBuilder(dtoElement.getName())
 				.addModifiers(Modifier.PUBLIC);
 		clazz.addFields(dtoElement.getFields().stream().map(t -> FieldSpec.builder(ClassName.get(t.getType()), t.getName(), Modifier.PRIVATE, Modifier.FINAL).addAnnotations(t.getElement().getAnnotationMirrors().stream().filter(a -> !((TypeElement)a.getAnnotationType().asElement()).getQualifiedName().toString().startsWith("com.bariskokulu.crudgen")).map(AnnotationSpec::get).collect(Collectors.toList())).build()).collect(Collectors.toList()));
@@ -32,7 +33,7 @@ public class EntityDTOGenerator {
 				.addParameters(dtoElement.getFields().stream().map(t -> ParameterSpec.builder(ClassName.get(t.getType()), t.getName()).build()).collect(Collectors.toList()));
 		dtoElement.getFields().forEach(t -> constructor.addStatement("this."+t.getName()+" = "+t.getName()));
 		clazz.addMethod(constructor.build());
-		util.saveFile("com.bariskokulu.crudgen", clazz.build());
+		Util.saveFile(element.getPackageName(), clazz.build(), processingEnv);
 		//			TypeSpec.Builder clazz = TypeSpec.recordBuilder(dtoElement.getName())
 		//					.addModifiers(Modifier.PUBLIC);
 		//			clazz.recordConstructor(MethodSpec.constructorBuilder().addModifiers(Modifier.PUBLIC)

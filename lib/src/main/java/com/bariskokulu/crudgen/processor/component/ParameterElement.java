@@ -9,7 +9,7 @@ import com.bariskokulu.crudgen.annotation.simple.FindBy;
 import lombok.Getter;
 
 @Getter
-public class ParameterElement {
+public class ParameterElement extends BaseElement {
 
 	private final Element element;
 	private final TypeMirror type;

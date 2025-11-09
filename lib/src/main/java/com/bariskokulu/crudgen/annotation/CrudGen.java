@@ -19,5 +19,7 @@ public @interface CrudGen {
 	public String controllerName() default "";
 	public String serviceName() default "";;
 	public String repositoryName() default "";
+	public String packageName() default "";
+	public Class<?> customRepo() default Void.class;
 	
 }

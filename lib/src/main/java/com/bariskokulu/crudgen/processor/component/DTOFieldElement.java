@@ -8,7 +8,7 @@ import com.bariskokulu.crudgen.annotation.http.DTOField;
 import lombok.Getter;
 
 @Getter
-public class DTOFieldElement {
+public class DTOFieldElement extends BaseElement {
 
 	private final Element element;
 	private final TypeMirror type;

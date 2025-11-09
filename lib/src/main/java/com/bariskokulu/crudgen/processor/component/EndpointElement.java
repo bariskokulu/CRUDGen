@@ -13,7 +13,7 @@ import com.bariskokulu.crudgen.util.HTTPMethod;
 import lombok.Getter;
 
 @Getter
-public class EndpointElement {
+public class EndpointElement extends BaseElement {
 
 	private final ExecutableElement element;
 	private final HTTPMethod httpMethod;

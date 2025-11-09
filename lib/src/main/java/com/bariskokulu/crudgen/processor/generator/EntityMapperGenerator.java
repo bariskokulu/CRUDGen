@@ -1,6 +1,7 @@
 package com.bariskokulu.crudgen.processor.generator;
 
 
+import javax.annotation.processing.ProcessingEnvironment;
 import javax.lang.model.element.Modifier;
 
 import com.bariskokulu.crudgen.processor.component.DTOElement;
@@ -14,7 +15,7 @@ import com.squareup.javapoet.TypeSpec;
 
 public class EntityMapperGenerator {
 
-	public static void generate(EntityElement element, Util util) {
+	public static void generate(EntityElement element, ProcessingEnvironment processingEnv) {
 		TypeSpec.Builder clazz = TypeSpec.interfaceBuilder(element.getMapperName())
 				.addAnnotation(AnnotationSpec.builder(TypeNames.MAPPER).build())
 				.addModifiers(Modifier.PUBLIC);
@@ -40,7 +41,7 @@ public class EntityMapperGenerator {
 					.addParameter(dto.getTypeName(), "dto")
 					.build());
 		}
-		util.saveFile("com.bariskokulu.crudgen", clazz.build());
+		Util.saveFile(element.getPackageName(), clazz.build(), processingEnv);
 	}
 
 }

@@ -14,7 +14,7 @@ import com.squareup.javapoet.ClassName;
 import lombok.Getter;
 
 @Getter
-public class DTOElement {
+public class DTOElement extends BaseElement {
 
 	private final String name;
 	private final ClassName typeName;
@@ -22,7 +22,7 @@ public class DTOElement {
 	
 	public DTOElement(String type, EntityElement entityElement) {
 		this.name = entityElement.getName()+type+"DTO";
-		this.typeName = ClassName.get("com.bariskokulu.crudgen", this.name);
+		this.typeName = ClassName.get(entityElement.getPackageName(), this.name);
 		this.fields = entityElement.getElement().getEnclosedElements().stream().filter(t -> t.getKind()==ElementKind.FIELD)
 				.map(t -> new AbstractMap.SimpleEntry<Element, DTOField>(t, Arrays.stream(t.getAnnotationsByType(DTOField.class)).filter(a -> a.dto().equals(type)).findFirst().orElse(null)))
 				.filter(t -> t.getValue() != null)

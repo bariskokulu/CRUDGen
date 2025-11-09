@@ -2,6 +2,7 @@ package com.bariskokulu.crudgen.processor.generator;
 
 import java.util.stream.Collectors;
 
+import javax.annotation.processing.ProcessingEnvironment;
 import javax.lang.model.element.Modifier;
 
 import com.bariskokulu.crudgen.processor.component.EndpointElement;
@@ -19,14 +20,14 @@ import com.squareup.javapoet.TypeSpec;
 
 public class UseCaseControllerGenerator {
 
-	public static void generate(UseCaseServiceElement service, Util util) {
-		TypeSpec.Builder clazz = TypeSpec.classBuilder(service.getControllerName() != null && !service.getControllerName().isEmpty() ? service.getControllerName() : service.getName()+"Controller")
+	public static void generate(UseCaseServiceElement element, ProcessingEnvironment processingEnv) {
+		TypeSpec.Builder clazz = TypeSpec.classBuilder(element.getControllerName() != null && !element.getControllerName().isEmpty() ? element.getControllerName() : element.getName()+"Controller")
 				.addAnnotation(AnnotationSpec.builder(TypeNames.CONTROLLER).build())
-				.addAnnotation(AnnotationSpec.builder(TypeNames.REQUEST_MAPPING).addMember("value", "$S", service.getPath()).build())
+				.addAnnotation(AnnotationSpec.builder(TypeNames.REQUEST_MAPPING).addMember("value", "$S", element.getPath()).build())
 				.addModifiers(Modifier.PUBLIC);
-		clazz.addMethod(MethodSpec.constructorBuilder().addModifiers(Modifier.PUBLIC).addParameter(service.getTypeName(), "service").addStatement("this.service = service").build());
-		clazz.addField(FieldSpec.builder(service.getTypeName(), "service", Modifier.PRIVATE, Modifier.FINAL).build());
-		for(EndpointElement endpoint : service.getEndpoints()) {
+		clazz.addMethod(MethodSpec.constructorBuilder().addModifiers(Modifier.PUBLIC).addParameter(element.getTypeName(), "service").addStatement("this.service = service").build());
+		clazz.addField(FieldSpec.builder(element.getTypeName(), "service", Modifier.PRIVATE, Modifier.FINAL).build());
+		for(EndpointElement endpoint : element.getEndpoints()) {
 			MethodSpec.Builder method = MethodSpec.methodBuilder(endpoint.getName())
 					.addModifiers(Modifier.PUBLIC);
 			StringBuilder paramString = new StringBuilder();
@@ -37,6 +38,7 @@ public class UseCaseControllerGenerator {
 				paramString.append(", "+param.getName());
 			}
 			if(endpoint.getReturnType() != null) {
+				// add two then remove two, plus a comment, polluting the code less than a check with for loop
 				method.addStatement("return $T.ok(service.$L($L))", TypeNames.RESPONSE_ENTITY, endpoint.getName(), paramString.append("  ").substring(2));
 				method.returns(ParameterizedTypeName.get(TypeNames.RESPONSE_ENTITY, ClassName.get(endpoint.getReturnType())));
 			} else {
@@ -45,7 +47,7 @@ public class UseCaseControllerGenerator {
 			method.addAnnotation(AnnotationSpec.builder(ClassName.bestGuess("org.springframework.web.bind.annotation."+endpoint.getHttpMethod().text()+"Mapping")).addMember("value", "$S", endpoint.getPath()).build());
 			clazz.addMethod(method.build());
 		}
-		util.saveFile("com.bariskokulu.crudgen", clazz.build());
+		Util.saveFile(element.getPackageName(), clazz.build(), processingEnv);
 	}
 
 }

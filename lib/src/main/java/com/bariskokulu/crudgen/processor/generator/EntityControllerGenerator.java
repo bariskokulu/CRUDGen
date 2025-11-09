@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import javax.annotation.processing.ProcessingEnvironment;
 import javax.lang.model.element.Modifier;
 
 import com.bariskokulu.crudgen.processor.component.DTOElement;
@@ -21,7 +22,7 @@ import com.squareup.javapoet.TypeSpec;
 
 public class EntityControllerGenerator {
 
-	public static void generate(EntityElement element, Util util) {
+	public static void generate(EntityElement element, ProcessingEnvironment processingEnv) {
 		if(element.getControllerPath().isEmpty()) return;
 		TypeSpec.Builder clazz = TypeSpec.classBuilder(element.getControllerName())
 				.addAnnotation(AnnotationSpec.builder(TypeNames.REST_CONTROLLER).build())
@@ -41,7 +42,14 @@ public class EntityControllerGenerator {
 				.addStatement("this.objectMapper = objectMapper")
 				.addStatement("this.validator = validator")
 				.build());
-		ClassName returnDtoTypeName = element.getDtos().get("Read").getTypeName();
+		
+		DTOElement readDTO = element.getDtos().get("Read");
+		if(readDTO == null) {
+			Util.error("A \"Read\" DTO is required for entity "+element.getName(), processingEnv);
+			return;
+		}
+		
+		ClassName returnDtoTypeName = readDTO.getTypeName();
 		
 		clazz.addMethod(MethodSpec.methodBuilder("get")
 				.addAnnotation(AnnotationSpec.builder(TypeNames.GET_MAPPING).addMember("value", "$S", "/{id}").build())
@@ -134,7 +142,7 @@ public class EntityControllerGenerator {
 						.build());
 			}
 		}
-		util.saveFile("com.bariskokulu.crudgen", clazz.build());
+		Util.saveFile(element.getPackageName(), clazz.build(), processingEnv);
 	}
 
 }

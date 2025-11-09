@@ -11,5 +11,6 @@ public @interface EndpointGen {
 
 	public String controllerPath();
 	public String controllerName() default "";
+	public String packageName() default "";
 	
 }
