@@ -1,406 +1,172 @@
-# Annotation Reference
+# Annotation reference
 
-Complete reference for all CRUDGen annotations and their parameters.
+Public API:
+
+- `com.bariskokulu.crudgen.annotation` — `@CrudGen`, `@EndpointGen`, `@Endpoint`, `@DTOField`
+- `com.bariskokulu.crudgen.annotation.simple` — `@FindBy`, `@FindAllBy`
+- `com.bariskokulu.crudgen.util.RepoType` — `JPA`, `MONGO`, `PLAIN`
+
+---
 
 ## @CrudGen
 
-The main annotation for generating CRUD layers from entity classes.
+**Target:** class (entity or document type)
 
-### Target
-- `ElementType.TYPE` - Applied to class declarations
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `repo` | `RepoType` | `JPA` | `JPA`, `MONGO`, or `PLAIN` |
+| `service` | `boolean` | `false` | Generate service. Also generated when `controllerPath` is set (unless `customService`) |
+| `controllerPath` | `String` | `""` | Base REST path, e.g. `/api/items`. Must start with `/`. Empty → no controller/DTOs/mapper |
+| `dtos` | `String[]` | `{}` | `"Read"`, `"Create"`, `"Update"`. `Read` required when `controllerPath` is set |
+| `controllerName` | `String` | `""` | Default `{Entity}Controller` |
+| `serviceName` | `String` | `""` | Default `{Entity}Service` |
+| `repositoryName` | `String` | `""` | Default `{Entity}Repository` |
+| `packageName` | `String` | `""` | Output package; default = entity package |
+| `customRepo` | `Class<?>` | `Void` | Skip generated repository; use this implementation |
+| `customController` | `Class<?>` | `Void` | Skip generated controller |
+| `customService` | `Class<?>` | `Void` | Skip generated service |
+| `extendRepo` | `Class<?>` | `Void` | Generated repository extends this interface |
+| `extendService` | `Class<?>` | `Void` | Generated service implements this interface |
+| `extendController` | `Class<?>` | `Void` | Generated controller implements this interface |
+| `securityService` | `boolean` | `true` | Call `CrudGenSecurityService` from generated controllers |
+| `logging` | `boolean` | `true` | SLF4J debug logs in generated code |
+| `openApi` | `boolean` | `true` | Swagger v3 annotations on generated controllers |
+| `lifecycleHooks` | `boolean` | `true` | Inject `EntityLifecycleCallbacks<T>` into generated controller/service |
 
-### Parameters
+### ID field
 
-| Parameter | Type | Default | Required | Description |
-|-----------|------|---------|----------|-------------|
-| `repo` | `RepoType` | `JPA` | No | Repository type: `JPA`, `MONGO`, or `PLAIN` (explicit CRUD contract, no Spring Data store interface) |
-| `service` | `boolean` | `false` | No | Generate service layer. If `false`, service is only generated when `controllerPath` is set |
-| `controllerPath` | `String` | `""` | No | REST controller base path (e.g., `/api/users`). If empty, no controller/DTOs/mapper are generated. Must start with `/` if not empty |
-| `dtos` | `String[]` | `{}` | No | DTO types to generate. Valid values: `"Read"`, `"Create"`, `"Update"`. `"Read"` is required if `controllerPath` is set |
-| `controllerName` | `String` | `""` | No | Custom controller class name. Default: `{EntityName}Controller` |
-| `serviceName` | `String` | `""` | No | Custom service class name. Default: `{EntityName}Service` |
-| `repositoryName` | `String` | `""` | No | Custom repository interface name. Default: `{EntityName}Repository` |
-| `packageName` | `String` | `""` | No | Package for generated classes. Default: entity's package |
-| `customRepo` | `Class<?>` | `Void.class` | No | Use existing repository class instead of generating one |
-| `customController` | `Class<?>` | `Void.class` | No | Use existing controller class instead of generating one |
-| `customService` | `Class<?>` | `Void.class` | No | Use existing service class instead of generating one |
-| `extendRepo` | `Class<?>` | `Void.class` | No | Interface for generated repository to extend |
-| `extendController` | `Class<?>` | `Void.class` | No | Interface for generated controller to extend |
-| `extendService` | `Class<?>` | `Void.class` | No | Interface for generated service to extend |
-| `securityService` | `boolean` | `true` | No | Enable security service integration in generated controllers |
-| `logging` | `boolean` | `true` | No | Enable debug logging in generated code |
+Exactly one field annotated with `@Id` (Spring Data). Its type is the ID type everywhere (path variables, batch keys). Missing `@Id` → compile error.
 
-### Generation Rules
+### Generated controller endpoints
 
-The processor follows these rules to determine what to generate:
+When `controllerPath` is set and no `customController`:
 
-1. **Repository**: Always generated unless `customRepo` is specified
-   - JPA: Extends `JpaRepository<Entity, IdType>` and `JpaSpecificationExecutor<Entity>`
-   - PLAIN: Declares `findById`, `findAll`, `findAll(Pageable)`, `save`, `saveAll`, `deleteById`, `deleteAllById` plus any `@FindBy` / `@FindAllBy` methods (implement with any persistence technology)
-   - MongoDB: Extends `MongoRepository<Entity, IdType>`
+| Method | Path | Condition |
+|--------|------|-----------|
+| GET | `/{id}` | always (Read DTO) |
+| GET | `/` | list |
+| GET | `/paged` | pagination (`page`, `size`) |
+| POST | `/` | Create DTO → **201 Created** |
+| POST | `/batch` | Create DTO list → **201** |
+| PATCH | `/{id}` | Update DTO + JSON Patch body |
+| PATCH | `/batch` | Map of id → patch |
+| DELETE | `/{id}` | **204** |
+| DELETE | `/batch` | id list → **204** |
+| GET | `/findBy{Field}` | `@FindBy` fields; **404** if not found |
+| GET | `/findAllBy{Field}` | `@FindAllBy` |
+| GET | `/findAllBy{Field}/paged` | `@FindAllBy` + pagination |
 
-2. **Service**: Generated if:
-   - `service = true` OR
-   - `controllerPath` is not empty
-   - Not generated if `customService` is specified
+Batch bodies: max **500** items (`@Size` on generated parameters).
 
-3. **Controller**: Generated only if:
-   - `controllerPath` is not empty
-   - `customController` is not specified
+### Repository shapes
 
-4. **DTOs**: Generated only if:
-   - `controllerPath` is not empty
-   - At least one field is annotated with `@DTOField` for each DTO type
+- **JPA** — `JpaRepository<E, ID>` + `JpaSpecificationExecutor<E>`
+- **MONGO** — `MongoRepository<E, ID>`
+- **PLAIN** — `@Repository` interface with explicit `findById`, `findAll`, `findAll(Pageable)`, `save`, `saveAll`, `deleteById`, `deleteAllById`, plus field queries
 
-5. **Mapper**: Generated only if:
-   - `controllerPath` is not empty
-   - `"Read"` DTO is specified
-
-### ID Type Detection
-
-The processor automatically detects the ID field by looking for fields annotated with `@Id` (from Spring Data). If no `@Id` field is found, it defaults to `Long`.
-
-### Examples
-
-```java
-// Minimal - repository only
-@CrudGen
-@Entity
-public class Product { ... }
-
-// Repository + Service
-@CrudGen(service = true)
-@Entity
-public class Order { ... }
-
-// Full stack
-@CrudGen(
-    controllerPath = "/api/users",
-    dtos = {"Read", "Create", "Update"}
-)
-@Entity
-public class User { ... }
-
-// MongoDB
-@CrudGen(
-    repo = RepoType.MONGO,
-    controllerPath = "/api/documents",
-    dtos = {"Read"}
-)
-@Document
-public class Document { ... }
-
-// Custom names and package
-@CrudGen(
-    controllerPath = "/api/products",
-    dtos = {"Read", "Create"},
-    controllerName = "ProductRestController",
-    serviceName = "ProductBusinessService",
-    packageName = "com.example.product.api"
-)
-@Entity
-public class Product { ... }
-
-// Extend interfaces
-@CrudGen(
-    controllerPath = "/api/users",
-    dtos = {"Read"},
-    extendRepo = CustomUserRepository.class,
-    extendService = UserServiceInterface.class
-)
-@Entity
-public class User { ... }
-```
+---
 
 ## @EndpointGen
 
-Annotation for generating REST controllers from use case service classes.
+**Target:** class (typically a `@Component` use-case)
 
-### Target
-- `ElementType.TYPE` - Applied to class declarations
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `controllerPath` | `String` | — | **Required.** Base path |
+| `controllerName` | `String` | `""` | Default `{Class}Controller` |
+| `packageName` | `String` | `""` | Output package |
+| `securityService` | `boolean` | `true` | Use-case security checks |
+| `logging` | `boolean` | `true` | Debug logging |
+| `openApi` | `boolean` | `true` | OpenAPI annotations |
 
-### Parameters
+Generated type: `@RestController` + `@Validated`, delegating to your class.
 
-| Parameter | Type | Default | Required | Description |
-|-----------|------|---------|----------|-------------|
-| `controllerPath` | `String` | - | **Yes** | REST controller base path (e.g., `/api/payments`) |
-| `controllerName` | `String` | `""` | No | Custom controller class name. Default: `{ServiceName}Controller` |
-| `packageName` | `String` | `""` | No | Package for generated controller. Default: service's package |
-| `securityService` | `boolean` | `true` | No | Enable security service integration |
-| `logging` | `boolean` | `true` | No | Enable debug logging |
-
-### Generation Rules
-
-- Controller is generated with `@Controller` annotation (not `@RestController`)
-- All methods annotated with `@Endpoint` in the service class become REST endpoints
-- Method parameters are preserved with their annotations (e.g., `@PathVariable`, `@RequestParam`)
-- Return types are wrapped in `ResponseEntity` if not void
-
-### Example
-
-```java
-@EndpointGen(controllerPath = "/api/orders")
-public class OrderService {
-    
-    @Endpoint(method = HTTPMethod.POST, path = "/create")
-    public Order createOrder(OrderRequest request) {
-        // implementation
-    }
-    
-    @Endpoint(method = HTTPMethod.GET, path = "/{id}")
-    public Order getOrder(@PathVariable Long id) {
-        // implementation
-    }
-    
-    @Endpoint(method = HTTPMethod.DELETE, path = "/cancel/{id}")
-    public void cancelOrder(@PathVariable Long id) {
-        // implementation
-    }
-}
-```
+---
 
 ## @Endpoint
 
-Annotation for marking methods in use case services that should become REST endpoints.
+**Target:** method in an `@EndpointGen` class
 
-### Target
-- `ElementType.METHOD` - Applied to method declarations
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `method` | `HTTPMethod` | `GET`, `POST`, `PUT`, `PATCH`, `DELETE` |
+| `path` | `String` | Relative path; must start with `/` |
 
-### Parameters
+Rules:
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `method` | `HTTPMethod` | **Yes** | HTTP method: `GET`, `POST`, `PUT`, `PATCH`, or `DELETE` |
-| `path` | `String` | **Yes** | Endpoint path relative to `controllerPath` from `@EndpointGen` |
+- Each `{param}` in `path` must match a Java parameter name (use `@PathVariable("param")` if `-parameters` is off).
+- Existing Spring web annotations on parameters are preserved; path tokens get `@PathVariable` even without a source annotation.
+- Non-void → `ResponseEntity.ok(body)`; void → **204**.
 
-### HTTP Methods
-
-Available values from `HTTPMethod` enum:
-- `GET` - Maps to `@GetMapping`
-- `POST` - Maps to `@PostMapping`
-- `PUT` - Maps to `@PutMapping`
-- `PATCH` - Maps to `@PatchMapping`
-- `DELETE` - Maps to `@DeleteMapping`
-
-### Example
-
-```java
-@EndpointGen(controllerPath = "/api/payments")
-public class PaymentService {
-    
-    @Endpoint(method = HTTPMethod.POST, path = "/process")
-    public PaymentResult process(@RequestBody PaymentRequest request) {
-        // implementation
-    }
-    
-    @Endpoint(method = HTTPMethod.GET, path = "/status/{id}")
-    public PaymentStatus getStatus(@PathVariable Long id) {
-        // implementation
-    }
-}
-```
+---
 
 ## @DTOField
 
-Annotation for marking entity fields to include in generated DTOs.
+**Target:** entity field. **Repeatable.**
 
-### Target
-- `ElementType.FIELD` - Applied to field declarations
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `dto` | `String` | — | `Read`, `Create`, or `Update` |
+| `fieldName` | `String` | `""` | DTO property name; default = entity field name |
 
-### Parameters
+Bean Validation annotations on the entity field are copied to the generated DTO field. Generated controllers use `@Valid` on create/batch bodies; PATCH validates the merged Update DTO.
 
-| Parameter | Type | Default | Required | Description |
-|-----------|------|---------|----------|-------------|
-| `dto` | `String` | - | **Yes** | DTO type: `"Read"`, `"Create"`, or `"Update"` |
-| `fieldName` | `String` | `""` | No | Custom field name in DTO. Default: entity field name |
-
-### Repeatable
-
-This annotation is `@Repeatable`, so you can apply it multiple times to the same field for different DTO types.
-
-### Validation Annotations
-
-Jakarta Validation annotations (e.g., `@NotNull`, `@Size`, `@Email`) on entity fields are automatically copied to the corresponding DTO fields.
-
-### Example
-
-```java
-@Entity
-public class User {
-    @Id
-    private Long id;
-    
-    // Include in all DTOs
-    @DTOField(dto = "Read")
-    @DTOField(dto = "Create")
-    @DTOField(dto = "Update")
-    @NotNull
-    @Size(min = 1, max = 100)
-    private String name;
-    
-    // Only in Read and Create
-    @DTOField(dto = "Read")
-    @DTOField(dto = "Create")
-    @Email
-    private String email;
-    
-    // Custom field name in Update DTO
-    @DTOField(dto = "Update", fieldName = "fullName")
-    private String name;
-}
-```
+---
 
 ## @FindBy
 
-Annotation for generating a `findBy{FieldName}()` method in repository and service.
-
-### Target
-- `ElementType.FIELD` - Applied to field declarations
-
-### Parameters
-None
-
-### Generated Methods
-
-When applied to a field, the following methods are generated:
-
-**In Repository:**
-```java
-EntityType findBy{FieldName}(FieldType fieldName);
-```
-
-**In Service:**
-```java
-EntityType findBy{FieldName}(FieldType fieldName);
-```
-
-**In Controller (if controller is generated):**
-```java
-GET /{controllerPath}/findBy{FieldName}?{fieldName}=value
-```
-
-### Example
-
-```java
-@Entity
-public class User {
-    @Id
-    private Long id;
-    
-    @FindBy
-    private String email;
-}
-```
+**Target:** field. No attributes.
 
 Generates:
-- `User findByEmail(String email)` in repository and service
-- `GET /api/users/findByEmail?email=user@example.com` endpoint
+
+- Repository: `Entity findBy{Field}(Type field)`
+- Service: same
+- Controller: `GET {controllerPath}/findBy{Field}?{field}=…` → **404** when null
+
+---
 
 ## @FindAllBy
 
-Annotation for generating `findAllBy{FieldName}()` methods in repository and service.
-
-### Target
-- `ElementType.FIELD` - Applied to field declarations
-
-### Parameters
-None
-
-### Generated Methods
-
-When applied to a field, the following methods are generated:
-
-**In Repository:**
-```java
-List<EntityType> findAllBy{FieldName}(FieldType fieldName);
-Page<EntityType> findAllBy{FieldName}(FieldType fieldName, Pageable pageable);
-```
-
-**In Service:**
-```java
-List<EntityType> findAllBy{FieldName}(FieldType fieldName);
-Page<EntityType> findAllBy{FieldName}Paged(FieldType fieldName, Pageable pageable);
-```
-
-**In Controller (if controller is generated):**
-```java
-GET /{controllerPath}/findAllBy{FieldName}?{fieldName}=value
-GET /{controllerPath}/findAllBy{FieldName}/paged?{fieldName}=value&page=0&size=20
-```
-
-### Example
-
-```java
-@Entity
-public class Order {
-    @Id
-    private Long id;
-    
-    @FindAllBy
-    private Long userId;
-}
-```
+**Target:** field. No attributes.
 
 Generates:
-- `List<Order> findAllByUserId(Long userId)` in repository and service
-- `Page<Order> findAllByUserId(Long userId, Pageable pageable)` in repository
-- `Page<Order> findAllByUserIdPaged(Long userId, Pageable pageable)` in service
-- `GET /api/orders/findAllByUserId?userId=123` endpoint
-- `GET /api/orders/findAllByUserId/paged?userId=123&page=0&size=20` endpoint
 
-## Generated Classes Reference
+- Repository: `List<Entity> findAllBy{Field}(…)` and `Page<Entity> findAllBy{Field}(…, Pageable)`
+- Service: list + `{Field}Paged` wrapper for page
+- Controller: list and `/paged` query endpoints
 
-### Repository Interface
+---
 
-Generated repository interfaces extend:
-- **JPA**: `JpaRepository<Entity, IdType>` and `JpaSpecificationExecutor<Entity>`
-- **MongoDB**: `MongoRepository<Entity, IdType>`
-- **PLAIN**: No Spring Data supertype; the interface declares the same logical operations the generated service calls (see below).
+## Shared generated types
 
-Standard methods (either inherited from Spring Data **or** declared on **PLAIN**):
-- `findById(IdType id)`
-- `findAll()`
-- `findAll(Pageable pageable)`
-- `save(Entity entity)`
-- `saveAll(Iterable<Entity> entities)`
-- `deleteById(IdType id)`
-- `deleteAllById(Iterable<IdType> ids)`
+### CrudGenSecurityService
 
-### Service Class
+Package: `com.bariskokulu.crudgen.security`
 
-Generated service classes include:
-- `get(IdType id)` - Get entity by ID, returns `null` if not found
-- `getAll()` - Get all entities
-- `getPaged(Pageable pageable)` - Get paginated entities
-- `save(Entity entity)` - Save entity (transactional)
-- `saveAll(List<Entity> entities)` - Save multiple entities (transactional)
-- `delete(IdType id)` - Delete entity by ID (transactional)
-- `deleteAll(List<IdType> ids)` - Delete multiple entities (transactional)
-- Field-based query methods (if `@FindBy` or `@FindAllBy` annotations are present)
+Emitted when **any** `@CrudGen` or `@EndpointGen` has `securityService = true`.
 
-### Controller Class
+- `checkEntityAccess(entityFqn, method, params…)` — entity canonical name + controller method name
+- `checkUseAccess(useCaseKey, params…)` — `com.example.Ops#methodName`
 
-Generated controllers include:
-- Full CRUD endpoints (GET, POST, PATCH, DELETE)
-- Batch operations (create, update, delete)
-- Pagination support
-- Field-based query endpoints
-- Security integration (if enabled)
-- Logging (if enabled)
+### EntityLifecycleCallbacks&lt;T&gt;
 
-### DTO Classes
+Package: `com.bariskokulu.crudgen.lifecycle`
 
-Generated DTOs are immutable classes with:
-- Private final fields
-- Public constructor with all fields
-- Public getter methods
-- Jakarta Validation annotations (copied from entity fields)
+Emitted when **any** entity has `lifecycleHooks = true`.
 
-### Mapper Interface
+Abstract: `beforeCreate`, `afterCreate`, `beforeUpdate`, `afterUpdate`, `beforeDelete`, `afterDelete`.
 
-Generated mapper interfaces (MapStruct) include:
-- `get(Entity entity)` - Map entity to Read DTO
-- `create(CreateDTO dto)` - Map Create DTO to entity (if Create DTO exists)
-- `toPatch(Entity entity)` - Map entity to Update DTO (if Update DTO exists)
-- `patch(Entity entity, UpdateDTO dto)` - Apply Update DTO to entity (if Update DTO exists)
+Default no-ops: `beforeCreateBatch`, `afterCreateBatch`, `beforeUpdateBatch`, `afterUpdateBatch`, `beforeDeleteBatch`, `afterDeleteBatch`.
 
+---
+
+## Mapper (MapStruct)
+
+When Read DTO exists:
+
+- `get(Entity)` → Read DTO
+- `create(CreateDTO)` → Entity (if Create exists)
+- `toPatch(Entity)` → Update DTO (if Update exists)
+- `patch(Entity, UpdateDTO)` — partial update helper
+
+Configure MapStruct + Lombok annotation processor order: **Lombok → MapStruct → CRUDGen**.

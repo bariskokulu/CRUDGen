@@ -165,4 +165,8 @@ public class EntityElement extends BaseElement {
 		this.lifecycleHooks = annotation.lifecycleHooks();
 	}
 
+	public TypeName getControllerServiceTypeName() {
+		return customServiceTypeName != null ? customServiceTypeName : serviceTypeName;
+	}
+
 }

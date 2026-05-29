@@ -1,41 +1,87 @@
-# What gets generated (decision tree)
+# What gets generated
 
-## `@CrudGen` on an entity class
+CRUDGen runs at compile time. Use this tree to decide annotations before you write entities.
 
-| Your annotation | Result |
-|-----------------|--------|
-| `@CrudGen` only (default `service = false`, empty `controllerPath`) | **Repository** only (`*Repository`). |
-| `repo = RepoType.PLAIN` | **Repository** is a Spring `@Repository` interface with explicit CRUD + `Page`/`Pageable` methods (no `JpaRepository` / `MongoRepository`). You implement it with JDBC, jOOQ, MyBatis, R2DBC, etc. Still uses Spring’s `Page` / `Pageable` types so the generated **service** and **controller** stay unchanged. |
-| `repo = PLAIN` and `extendRepo` set | Only **extends** your type; no extra CRUD methods are generated—you must inherit or declare every method the generated **service** calls (`findById`, `save`, …). |
-| `repo = RepoType.JPA` / `MONGO` | Repository extends Spring Data **JPA** or **MongoDB** as before. |
-| `@CrudGen(service = true)` and empty `controllerPath` | **Repository** + **Service**. |
-| `controllerPath = "/api/..."` | **Repository**, **Service**, **Mapper**, **DTOs** (from `dtos` + `@DTOField`), **Controller**. Requires a **Read** DTO in `dtos`. |
-| `customRepo` / `customService` / `customController` | Skips generating that layer; use your type instead. |
-| `extendRepo` / `extendService` / `extendController` | Generated type **extends** or **implements** that type (see generator for exact superinterface rules). |
+## `@CrudGen` on an entity
 
-### Flags that change behavior
+```
+@Entity + @Id present?
+  └─ NO → compile error
 
-- **`securityService`** (default `true`): generated controllers call `CrudGenSecurityService`. The **`CrudGenSecurityService` interface stub is emitted only if** at least one `@CrudGen` or `@EndpointGen` type has `securityService = true`.
-- **`lifecycleHooks`** (default `true`): service/controller call `EntityLifecycleCallbacks<T>` (nullable bean). Implement the six abstract methods; `*Batch` methods are optional `default` no-ops. The interface is emitted only if at least one `@CrudGen` has `lifecycleHooks = true`.
-- **`openApi`**: adds Swagger/OpenAPI 3 annotations on generated controllers when `true`.
-- **`logging`**: adds `logger.debug(...)` in generated controller/service when `true`.
+@CrudGen present?
+  └─ NO → nothing generated
 
-### Field annotations
+Repository
+  customRepo specified?
+    └─ YES → use that type; no generated repository interface
+    └─ NO  → generate {Entity}Repository (or repositoryName)
+              repo = JPA   → extends JpaRepository + JpaSpecificationExecutor
+              repo = MONGO → extends MongoRepository
+              repo = PLAIN → @Repository interface with explicit CRUD + query methods
 
-- **`@DTOField(dto = "Read")`** (repeatable): includes that field in the matching `*ReadDTO`, `*CreateDTO`, etc.
-- **`@FindBy`**: repository `findBy*`, service, and controller endpoint.
-- **`@FindAllBy`**: list + paged variants on repository, service, and controller.
+Service
+  customService specified?
+    └─ YES → no generated service
+    └─ NO  → generate if service=true OR controllerPath non-empty
 
-## `@EndpointGen` + `@Endpoint` on a class
+Controller + DTOs + Mapper
+  customController specified?
+    └─ YES → no generated controller (service/repo/DTOs/mapper still follow rules below)
+  controllerPath empty?
+    └─ YES → no controller, no DTOs, no mapper
+    └─ NO  → generate controller
+              require "Read" in dtos
+              generate DTOs listed in dtos (fields need @DTOField per DTO)
+              generate MapStruct mapper when Read DTO exists
 
-| Condition | Result |
-|-----------|--------|
-| Class has `@EndpointGen(controllerPath = "...")` and methods with `@Endpoint` | **`*Controller`** exposing Spring MVC mappings that delegate to your class (the “use case” service bean). |
+Update / JSON Patch
+  "Update" in dtos?
+    └─ YES → PATCH /{id} and PATCH /batch; require Jackson + zjsonpatch on classpath
+    └─ NO  → no PATCH endpoints; no ObjectMapper/Validator in controller ctor
 
-## After you turn off security or lifecycle
+Field queries
+  @FindBy on field     → findBy{Field} in repo/service; GET …/findBy{Field}
+  @FindAllBy on field  → findAllBy{Field} (+ paged); GET …/findAllBy{Field}[/paged]
 
-If you set `securityService = false` everywhere (or `lifecycleHooks = false` everywhere), run a **clean compile** so old generated stubs under `build/generated/...` are not confused with your new settings. The processor does not delete stale files.
+Shared interfaces (once per compilation round)
+  any entity/use-case with securityService=true (default)?
+    └─ YES → generate CrudGenSecurityService
+  any entity with lifecycleHooks=true (default)?
+    └─ YES → generate EntityLifecycleCallbacks<T>
+```
 
-## Bean Validation package
+## `@EndpointGen` on a class
 
-The processor chooses **`javax.*` vs `jakarta.*`** from the compile classpath: if only **`javax.validation.Validator`** is present, generated code uses **`javax`**; otherwise it defaults to **`jakarta`**. If both are visible, prefer a single validation API on the annotation processor classpath to avoid ambiguity.
+```
+@EndpointGen present?
+  └─ NO → nothing
+
+controllerPath set (required)?
+  └─ generate {Class}Controller (or controllerName) under packageName or source package
+
+For each @Endpoint method:
+  map HTTPMethod → @GetMapping / @PostMapping / …
+  path must start with /
+  each {name} in path must match a method parameter name
+  void return → 204 No Content
+  other returns → 200 OK in ResponseEntity
+
+securityService / logging / openApi follow @EndpointGen flags (defaults true)
+```
+
+## Quick presets
+
+| You want | Minimum annotation |
+|----------|-------------------|
+| Repository only | `@CrudGen` + `@Id` |
+| Service, no HTTP | `@CrudGen(service = true)` |
+| REST CRUD | `@CrudGen(controllerPath = "/api/x", dtos = {"Read", "Create"})` |
+| + JSON Patch updates | add `"Update"` to `dtos` + zjsonpatch dep |
+| JDBC/MyBatis/etc. | `@CrudGen(repo = PLAIN, customRepo = YourRepo.class)` |
+| MongoDB | `@CrudGen(repo = MONGO, …)` + Spring Data Mongo |
+| Custom REST for entity | `@CrudGen(customController = X.class, controllerPath = "…")` |
+| Use-case API | `@EndpointGen(controllerPath = "/api/…")` + `@Endpoint` on methods |
+
+Live presets: [samples/simple-boot3](../samples/simple-boot3) (minimal), [samples/complex-boot3](../samples/complex-boot3) (full).
+
+Parameter details: [ANNOTATIONS.md](ANNOTATIONS.md).

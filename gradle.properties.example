@@ -1,0 +1,6 @@
+# Copy to gradle.properties (gitignored) for Maven Central publish from :lib
+# signing.keyId=
+# signing.password=
+# signing.secretKeyRingFile=
+# mavenCentralUsername=
+# mavenCentralPassword=

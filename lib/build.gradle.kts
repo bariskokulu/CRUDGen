@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "io.github.bariskokulu"
-version = "1.0.2"
+version = "1.1.0"
 val artifactId = "crudgen"
 
 repositories {

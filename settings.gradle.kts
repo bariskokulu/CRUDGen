@@ -4,7 +4,7 @@ plugins {
 
 rootProject.name = "CrudGen"
 include("lib")
-include("simple-boot3")
-include("simple-boot4")
-include("complex-boot3")
-include("complex-boot4")
+include("samples:simple-boot3")
+include("samples:simple-boot4")
+include("samples:complex-boot3")
+include("samples:complex-boot4")

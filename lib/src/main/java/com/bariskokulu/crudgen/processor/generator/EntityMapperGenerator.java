@@ -18,7 +18,9 @@ public class EntityMapperGenerator {
 	public static void generate(EntityElement element, ProcessingEnvironment processingEnv) {
 		if(element.getMapperTypeName()==null) return;
 		TypeSpec.Builder clazz = TypeSpec.interfaceBuilder(element.getMapperName())
-				.addAnnotation(AnnotationSpec.builder(TypeNames.MAPPER).build())
+				.addAnnotation(AnnotationSpec.builder(TypeNames.MAPPER)
+						.addMember("componentModel", "$S", "spring")
+						.build())
 				.addModifiers(Modifier.PUBLIC);
 		clazz.addMethod(MethodSpec.methodBuilder("get").addModifiers(Modifier.PUBLIC, Modifier.ABSTRACT)
 				.addParameter(element.getTypeName(), "entity")

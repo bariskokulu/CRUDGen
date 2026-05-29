@@ -31,6 +31,7 @@ public class EntityControllerGenerator {
 		boolean needsJsonPatch = element.getDtos().containsKey("Update");
 		TypeSpec.Builder clazz = TypeSpec.classBuilder(element.getControllerName())
 				.addAnnotation(AnnotationSpec.builder(TypeNames.REST_CONTROLLER).build())
+				.addAnnotation(AnnotationSpec.builder(TypeNames.VALIDATED).build())
 				.addAnnotation(AnnotationSpec.builder(TypeNames.REQUEST_MAPPING).addMember("value", "$S", element.getControllerPath()).build())
 				.addModifiers(Modifier.PUBLIC);
 		if(element.isOpenApi()) {
@@ -39,28 +40,29 @@ public class EntityControllerGenerator {
 		if(element.getExtendControllerTypeName() != null) {
 			clazz.addSuperinterface(element.getExtendControllerTypeName());
 		}
-		clazz.addField(FieldSpec.builder(element.getServiceTypeName(), "service", Modifier.PRIVATE, Modifier.FINAL).build());
+		clazz.addField(FieldSpec.builder(element.getControllerServiceTypeName(), "service", Modifier.PRIVATE, Modifier.FINAL).build());
 		clazz.addField(FieldSpec.builder(element.getMapperTypeName(), "mapper", Modifier.PRIVATE, Modifier.FINAL).build());
 		if (needsJsonPatch) {
 			clazz.addField(FieldSpec.builder(TypeNames.OBJECT_MAPPER, "objectMapper", Modifier.PRIVATE, Modifier.FINAL).build());
+			clazz.addField(FieldSpec.builder(TypeNames.VALIDATOR, "validator", Modifier.PRIVATE, Modifier.FINAL).build());
 		}
-		clazz.addField(FieldSpec.builder(TypeNames.VALIDATOR, "validator", Modifier.PRIVATE, Modifier.FINAL).build());
 		if(element.isLogging()) {
 			clazz.addField(FieldSpec.builder(TypeNames.LOGGER, "logger", Modifier.PRIVATE, Modifier.STATIC, Modifier.FINAL).initializer("$T.getLogger($T.class)", TypeNames.LOGGER_FACTORY, element.getControllerTypeName()).build());
 		}
 		MethodSpec.Builder constructorBuilder = MethodSpec.constructorBuilder().addModifiers(Modifier.PUBLIC)
-				.addParameter(element.getServiceTypeName(), "service")
+				.addParameter(element.getControllerServiceTypeName(), "service")
 				.addParameter(element.getMapperTypeName(), "mapper");
 		if (needsJsonPatch) {
 			constructorBuilder.addParameter(TypeNames.OBJECT_MAPPER, "objectMapper");
+			constructorBuilder.addParameter(TypeNames.VALIDATOR, "validator");
 		}
-		constructorBuilder.addParameter(TypeNames.VALIDATOR, "validator")
+		constructorBuilder
 				.addStatement("this.service = service")
 				.addStatement("this.mapper = mapper");
 		if (needsJsonPatch) {
 			constructorBuilder.addStatement("this.objectMapper = objectMapper");
+			constructorBuilder.addStatement("this.validator = validator");
 		}
-		constructorBuilder.addStatement("this.validator = validator");
 		if(element.isSecureEndpoints()) {
 			constructorBuilder.addParameter(TypeNames.CRUDGEN_SECURITY_SERVICE, "securityService")
 			.addStatement("this.securityService = securityService");
@@ -127,10 +129,10 @@ public class EntityControllerGenerator {
 				"200", false);
 		addPageAndSizeQueryParams(element, getPagedMethod);
 		getPagedMethod
-				.addCode(checkThenAddLog(element, "GET /getPaged called with page {}, size {}", "page", "size"))
+				.addCode(checkThenAddLog(element, "GET /paged called with page {}, size {}", "page", "size"))
 				.addCode(checkThenAddSecurity(element, "getPaged", "page, size"))
 				.addStatement("Page<$T> pageResult = service.getPaged($T.of(page, size)).map(t -> mapper.get(t))", returnDtoTypeName, TypeNames.PAGE_REQUEST)
-				.addCode(checkThenAddLog(element, "GET /getPaged returning {} entities", "pageResult.getNumberOfElements()"))
+				.addCode(checkThenAddLog(element, "GET /paged returning {} entities", "pageResult.getNumberOfElements()"))
 				.addStatement("return $T.ok(pageResult)", TypeNames.RESPONSE_ENTITY)
 				.returns(ParameterizedTypeName.get(TypeNames.RESPONSE_ENTITY, ParameterizedTypeName.get(TypeNames.PAGE, returnDtoTypeName)));
 		clazz.addMethod(getPagedMethod.build());
@@ -165,7 +167,9 @@ public class EntityControllerGenerator {
 		ParameterSpec.Builder deleteBatchParam = ParameterSpec.builder(
 				ParameterizedTypeName.get(ClassName.get(List.class), element.getIdTypeName()), 
 				"ids")
-			.addAnnotation(TypeNames.REQUEST_BODY);
+			.addAnnotation(TypeNames.VALID)
+			.addAnnotation(TypeNames.REQUEST_BODY)
+			.addAnnotation(AnnotationSpec.builder(TypeNames.SIZE).addMember("max", "$L", Util.MAX_BATCH_SIZE).build());
 		if(element.isOpenApi()) {
 			deleteBatchParam.addAnnotation(OpenApiUtil.buildRequestBodyAnnotation("ids"));
 		}
@@ -175,7 +179,8 @@ public class EntityControllerGenerator {
 				.addStatement("$T toDelete = new $T<>()", ParameterizedTypeName.get(ClassName.get(List.class), element.getTypeName()), ClassName.get(ArrayList.class))
 				.addCode("for ($T id : ids) {\n", element.getIdTypeName())
 				.addStatement("  $T e = service.get(id)", element.getTypeName())
-				.addStatement("  if (e != null) toDelete.add(e)")
+				.addStatement("  if (e == null) throw new $T($T.NOT_FOUND, \"Entity with id \" + id + \" not found.\")", TypeNames.RESOURCE_STATUS_EXCEPTION, TypeNames.HTTP_STATUS)
+				.addStatement("  toDelete.add(e)")
 				.addCode("}\n")
 				.addCode(batchLifeCycleHook(element, "beforeDeleteBatch", "toDelete"))
 				.addStatement("service.deleteAll(ids)")
@@ -207,7 +212,7 @@ public class EntityControllerGenerator {
 					.addStatement("$T returnDto = mapper.get(created)", returnDtoTypeName)
 					.addCode(checkThenAddLifeCycleHook(element, "afterCreate", "created"))
 					.addCode(checkThenAddLog(element, "POST / created entity {}", "returnDto"))
-					.addStatement("return $T.ok(returnDto)", TypeNames.RESPONSE_ENTITY)
+					.addStatement("return $T.status($T.CREATED).body(returnDto)", TypeNames.RESPONSE_ENTITY, TypeNames.HTTP_STATUS)
 					.returns(ParameterizedTypeName.get(TypeNames.RESPONSE_ENTITY, returnDtoTypeName));
 			clazz.addMethod(createMethod.build());
 			MethodSpec.Builder createBatchMethod = MethodSpec.methodBuilder("createBatch")
@@ -223,7 +228,8 @@ public class EntityControllerGenerator {
 					ParameterizedTypeName.get(ClassName.get(List.class), element.getDtos().get("Create").getTypeName()), 
 					"bodies")
 				.addAnnotation(TypeNames.VALID)
-				.addAnnotation(TypeNames.REQUEST_BODY);
+				.addAnnotation(TypeNames.REQUEST_BODY)
+				.addAnnotation(AnnotationSpec.builder(TypeNames.SIZE).addMember("max", "$L", Util.MAX_BATCH_SIZE).build());
 			if(element.isOpenApi()) {
 				createBatchBodyParam.addAnnotation(OpenApiUtil.buildRequestBodyAnnotation("bodies"));
 			}
@@ -241,7 +247,7 @@ public class EntityControllerGenerator {
 							ClassName.get(Collectors.class))
 					.addCode(batchLifeCycleHook(element, "afterCreateBatch", "entities"))
 					.addCode(checkThenAddLog(element, "POST /batch created {} entities", "returnDtos.size()"))
-					.addStatement("return $T.ok(returnDtos)", TypeNames.RESPONSE_ENTITY)
+					.addStatement("return $T.status($T.CREATED).body(returnDtos)", TypeNames.RESPONSE_ENTITY, TypeNames.HTTP_STATUS)
 					.returns(ParameterizedTypeName.get(TypeNames.RESPONSE_ENTITY, 
 							ParameterizedTypeName.get(ClassName.get(List.class), returnDtoTypeName)));
 			clazz.addMethod(createBatchMethod.build());
@@ -298,7 +304,9 @@ public class EntityControllerGenerator {
 							element.getIdTypeName(), 
 							TypeNames.JSON_NODE), 
 					"patches")
-				.addAnnotation(TypeNames.REQUEST_BODY);
+				.addAnnotation(TypeNames.VALID)
+				.addAnnotation(TypeNames.REQUEST_BODY)
+				.addAnnotation(AnnotationSpec.builder(TypeNames.SIZE).addMember("max", "$L", Util.MAX_BATCH_SIZE).build());
 			if(element.isOpenApi()) {
 				updateBatchParam.addAnnotation(OpenApiUtil.buildRequestBodyAnnotation("patches"));
 			}
@@ -352,14 +360,19 @@ public class EntityControllerGenerator {
 						"Finds a single " + element.getName() + " entity by " + field.getName(),
 						"200", true);
 				ParameterSpec.Builder findByParam = ParameterSpec.builder(ClassName.get(field.getType()), field.getName())
-					.addAnnotation(TypeNames.REQUEST_PARAM);
+					.addAnnotation(Util.requestParam(field.getName(), true));
+				for (AnnotationSpec bv : Util.beanValidationAnnotationSpecs(field.getElement())) {
+					findByParam.addAnnotation(bv);
+				}
 				if(element.isOpenApi()) {
 					findByParam.addAnnotation(OpenApiUtil.buildParameterAnnotation(field.getName(), "The " + field.getName() + " value to search for", "QUERY", true));
 				}
 				findByMethod.addParameter(findByParam.build())
 						.addCode(checkThenAddLog(element, "GET /findBy"+field.getNameCapitalized()+"() called with "+field.getName()+" {}", field.getName()))
 						.addCode(checkThenAddSecurity(element, "findBy"+field.getNameCapitalized(), field.getName()))
-						.addStatement("$T returnDto = mapper.get(service.findBy$L($L))", returnDtoTypeName, field.getNameCapitalized(), field.getName())
+						.addStatement("$T existing = service.findBy$L($L)", element.getTypeName(), field.getNameCapitalized(), field.getName())
+						.addStatement("if (existing == null) throw new $T($T.NOT_FOUND, \"Entity not found for " + field.getName() + "=\" + $L)", TypeNames.RESOURCE_STATUS_EXCEPTION, TypeNames.HTTP_STATUS, field.getName())
+						.addStatement("$T returnDto = mapper.get(existing)", returnDtoTypeName)
 						.addCode(checkThenAddLog(element, "GET /findBy"+field.getNameCapitalized()+"() returning entity {}", "returnDto"))
 						.addStatement("return $T.ok(returnDto)", TypeNames.RESPONSE_ENTITY)
 						.returns(ParameterizedTypeName.get(TypeNames.RESPONSE_ENTITY, returnDtoTypeName));
@@ -374,7 +387,10 @@ public class EntityControllerGenerator {
 						"Finds all " + element.getName() + " entities matching the " + field.getName() + " value",
 						"200", false);
 				ParameterSpec.Builder findAllByParam = ParameterSpec.builder(ClassName.get(field.getType()), field.getName())
-					.addAnnotation(TypeNames.REQUEST_PARAM);
+					.addAnnotation(Util.requestParam(field.getName(), true));
+				for (AnnotationSpec bv : Util.beanValidationAnnotationSpecs(field.getElement())) {
+					findAllByParam.addAnnotation(bv);
+				}
 				if(element.isOpenApi()) {
 					findAllByParam.addAnnotation(OpenApiUtil.buildParameterAnnotation(field.getName(), "The " + field.getName() + " value to search for", "QUERY", true));
 				}
@@ -397,7 +413,10 @@ public class EntityControllerGenerator {
 						"Finds a paginated list of " + element.getName() + " entities matching the " + field.getName() + " value",
 						"200", false);
 				ParameterSpec.Builder findAllByPagedFieldParam = ParameterSpec.builder(ClassName.get(field.getType()), field.getName())
-					.addAnnotation(TypeNames.REQUEST_PARAM);
+					.addAnnotation(Util.requestParam(field.getName(), true));
+				for (AnnotationSpec bv : Util.beanValidationAnnotationSpecs(field.getElement())) {
+					findAllByPagedFieldParam.addAnnotation(bv);
+				}
 				if(element.isOpenApi()) {
 					findAllByPagedFieldParam.addAnnotation(OpenApiUtil.buildParameterAnnotation(field.getName(), "The " + field.getName() + " value to search for", "QUERY", true));
 				}
@@ -429,23 +448,24 @@ public class EntityControllerGenerator {
 
 	private static void addPageAndSizeQueryParams(EntityElement element, MethodSpec.Builder method) {
 		ParameterSpec.Builder pageParam = ParameterSpec.builder(ClassName.get(Integer.class).unbox(), "page")
-				.addAnnotation(TypeNames.REQUEST_PARAM)
+				.addAnnotation(Util.requestParam("page", true))
 				.addAnnotation(AnnotationSpec.builder(TypeNames.MIN).addMember("value", "0").build());
 		if (element.isOpenApi()) {
-			pageParam.addAnnotation(OpenApiUtil.buildParameterAnnotation("page", "Page number (0-indexed)", "QUERY", false));
+			pageParam.addAnnotation(OpenApiUtil.buildParameterAnnotation("page", "Page number (0-indexed)", "QUERY", true));
 		}
 		ParameterSpec.Builder sizeParam = ParameterSpec.builder(ClassName.get(Integer.class).unbox(), "size")
-				.addAnnotation(TypeNames.REQUEST_PARAM)
-				.addAnnotation(AnnotationSpec.builder(TypeNames.MIN).addMember("value", "0").build());
+				.addAnnotation(Util.requestParam("size", true))
+				.addAnnotation(AnnotationSpec.builder(TypeNames.MIN).addMember("value", "1").build())
+				.addAnnotation(AnnotationSpec.builder(TypeNames.MAX).addMember("value", "$L", Util.MAX_PAGE_SIZE).build());
 		if (element.isOpenApi()) {
-			sizeParam.addAnnotation(OpenApiUtil.buildParameterAnnotation("size", "Page size", "QUERY", false));
+			sizeParam.addAnnotation(OpenApiUtil.buildParameterAnnotation("size", "Page size", "QUERY", true));
 		}
 		method.addParameter(pageParam.build()).addParameter(sizeParam.build());
 	}
 
 	private static ParameterSpec.Builder pathVariableIdParam(EntityElement element, String description) {
 		ParameterSpec.Builder idParam = ParameterSpec.builder(element.getIdTypeName(), "id")
-				.addAnnotation(AnnotationSpec.builder(TypeNames.PATH_VARIABLE).build());
+				.addAnnotation(Util.pathVariable("id"));
 		if (element.isOpenApi()) {
 			idParam.addAnnotation(OpenApiUtil.buildParameterAnnotation("id", description, "PATH", true));
 		}
@@ -453,7 +473,8 @@ public class EntityControllerGenerator {
 	}
 
 	public static String checkThenAddSecurity(EntityElement element, String method, String params) {
-		return element.isSecureEndpoints() ? "securityService.checkEntityAccess(\""+element.getName()+"\", \""+method+"\""+(params.length() > 0 ? ", " : "")+params+");\n" : "";
+		String entityKey = element.getTypeName().canonicalName();
+		return element.isSecureEndpoints() ? "securityService.checkEntityAccess(\""+entityKey+"\", \""+method+"\""+(params.length() > 0 ? ", " : "")+params+");\n" : "";
 	}
 
 	public static String checkThenAddLog(EntityElement element, String message, String... args) {

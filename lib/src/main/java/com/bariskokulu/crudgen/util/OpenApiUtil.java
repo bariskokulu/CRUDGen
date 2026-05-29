@@ -52,7 +52,7 @@ public class OpenApiUtil {
 		return AnnotationSpec.builder(TypeNames.PARAMETER)
 			.addMember("name", "$S", name)
 			.addMember("description", "$S", description)
-			.addMember("required", String.valueOf(required))
+			.addMember("required", "$L", required)
 			.addMember("in", "$T.$L", TypeNames.PARAMETER_IN, paramType)
 			.build();
 	}

@@ -1,541 +1,242 @@
 # Examples
 
-## Basic CRUD Operations
+Working code lives in [`samples/`](../samples/). This page maps common goals to those modules and shows the core patterns inline.
 
-### Full Stack Generation
+---
+
+## 1. Minimal REST API
+
+**Module:** [samples/simple-boot3](../samples/simple-boot3) (Boot 3) or [samples/simple-boot4](../samples/simple-boot4) (Boot 4)
+
+Smallest setup that still returns JSON from a real controller:
 
 ```java
 @CrudGen(
-    controllerPath = "/api/users",
-    dtos = {"Read", "Create", "Update"}
+    controllerPath = "/api/widgets",
+    dtos = { "Read", "Create" },
+    securityService = false,
+    lifecycleHooks = false,
+    openApi = false,
+    logging = false
 )
 @Entity
-public class User {
-    @Id
+public class Widget {
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-    
+
     @DTOField(dto = "Read")
     @DTOField(dto = "Create")
-    @DTOField(dto = "Update")
-    @NotNull
-    @Size(min = 1, max = 100)
+    @NotBlank
     private String name;
-    
-    @DTOField(dto = "Read")
-    @DTOField(dto = "Create")
-    @Email
-    private String email;
-    
-    // Not included in DTOs
-    private String passwordHash;
-    
-    @DTOField(dto = "Read")
-    private LocalDateTime createdAt;
 }
 ```
 
-**Generated Files:**
-- `UserRepository` - JPA repository
-- `UserService` - Service with CRUD methods
-- `UserController` - REST controller with endpoints:
-  - `GET /api/users/{id}`
-  - `GET /api/users/`
-  - `GET /api/users/paged?page=0&size=20`
-  - `POST /api/users`
-  - `POST /api/users/batch`
-  - `PATCH /api/users/{id}` (JSON Patch)
-  - `PATCH /api/users/batch` (JSON Patch)
-  - `DELETE /api/users/{id}`
-  - `DELETE /api/users/batch`
-- `UserReadDTO`, `UserCreateDTO`, `UserUpdateDTO`
-- `UserMapper` - MapStruct interface
+Turn off security/lifecycle in the annotation when you have not registered `CrudGenSecurityService` / `EntityLifecycleCallbacks` beans yet.
 
-## Repository Only
+---
 
-Generate only the repository interface:
+## 2. Full CRUD with JSON Patch
+
+**Module:** `MegaProduct` in [samples/complex-boot3](../samples/complex-boot3)
 
 ```java
-@CrudGen
+@CrudGen(
+    controllerPath = "/api/mega-products",
+    dtos = { "Read", "Create", "Update" },
+    packageName = "com.example.product.api",
+    repositoryName = "MegaProductStore"
+)
 @Entity
-public class Product {
+public class MegaProduct { /* @FindBy / @FindAllBy / @DTOField */ }
+```
+
+Add to Gradle when using `Update`:
+
+```kotlin
+compileOnly("io.github.vishwakarma:zjsonpatch:0.6.2") // Boot 4 / Jackson 3
+// Boot 3 / Jackson 2: com.flipkart.zjsonpatch:zjsonpatch:0.4.16
+```
+
+Patch request:
+
+```http
+PATCH /api/mega-products/1
+Content-Type: application/json-patch+json
+
+[{"op":"replace","path":"/sku","value":"NEW-SKU"}]
+```
+
+Batch patch body: JSON object `{ "1": […patch…], "2": […patch…] }`.
+
+---
+
+## 3. Field queries
+
+**Module:** `MegaProduct`, `MongoTag` in complex samples
+
+```java
+@FindBy
+@DTOField(dto = "Read")
+private String sku;
+
+@FindAllBy
+@DTOField(dto = "Read")
+private String category;
+```
+
+→ `GET /api/mega-products/findBySku?sku=…`  
+→ `GET /api/mega-products/findAllByCategory?category=…`  
+→ `GET /api/mega-products/findAllByCategory/paged?category=…&page=0&size=20`
+
+---
+
+## 4. Custom names and packages
+
+**Module:** `MegaProduct` in complex samples
+
+```java
+@CrudGen(
+    packageName = "com.example.crudgen.complex.gen",
+    controllerName = "MegaProductController",
+    serviceName = "MegaProductService",
+    repositoryName = "MegaProductStore",
+    extendRepo = MegaProductRepoExt.class,
+    extendService = MegaProductServiceExt.class,
+    extendController = MegaProductControllerExt.class,
+    /* … */
+)
+```
+
+Generated types land in `packageName`; your marker interfaces stay in the entity package.
+
+---
+
+## 5. Custom service / controller / repository
+
+| Pattern | Module entity | Annotation |
+|---------|---------------|------------|
+| Hand-written service | `ManualShelf` | `customService = ManualShelfService.class` |
+| Hand-written controller | `BespokeItem` | `customController = BespokeItemController.class` |
+| PLAIN repo impl | `PlainCustomer` | `repo = PLAIN`, `customRepo = PlainCustomerRepositoryImpl.class` |
+
+Generated layers not replaced still compile (e.g. `customController` → service + repo + DTOs still generated).
+
+---
+
+## 6. MongoDB entity
+
+**Module:** `MongoTag` in complex samples
+
+```java
+@Document(collection = "mongo_tags")
+@CrudGen(
+    repo = RepoType.MONGO,
+    controllerPath = "/api/mongo-tags",
+    dtos = { "Read", "Create", "Update" }
+)
+public class MongoTag {
     @Id
-    private Long id;
-    
-    private String name;
-    private BigDecimal price;
-    private Integer stock;
+    private String id;
+    /* … */
 }
 ```
 
-**Generated Files:**
-- `ProductRepository` - JPA repository extending `JpaRepository<Product, Long>` and `JpaSpecificationExecutor<Product>`
+Tests without MongoDB: exclude Mongo autoconfig and provide a test `@Primary` mock repository — see [complex-boot4/README.md](../samples/complex-boot4/README.md).
 
-## Service + Repository
+---
 
-Generate repository and service, but no controller:
+## 7. Service only (no HTTP)
+
+**Module:** `HeadlessTask` in complex samples
 
 ```java
 @CrudGen(service = true)
 @Entity
-public class Order {
-    @Id
+public class HeadlessTask {
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-    
-    private Long userId;
-    private BigDecimal total;
-    private OrderStatus status;
 }
 ```
 
-**Generated Files:**
-- `OrderRepository` - JPA repository
-- `OrderService` - Service class with CRUD methods
+Generates repository + service; no controller or DTOs.
 
-You can inject and use the service in your own controllers or other services.
+---
 
-## MongoDB Repository
+## 8. Use-case REST (`@EndpointGen`)
 
-Generate MongoDB repository instead of JPA:
+**Module:** `FullHttpOps`, `EdgeOps` in complex samples
 
 ```java
-@CrudGen(
-    repo = RepoType.MONGO,
-    controllerPath = "/api/documents",
-    dtos = {"Read", "Create"}
+@EndpointGen(
+    controllerPath = "/api/ops",
+    securityService = true,
+    openApi = true
 )
-@Document
-public class Document {
-    @Id
-    private String id;  // MongoDB uses String IDs
-    
-    @DTOField(dto = "Read")
-    @DTOField(dto = "Create")
-    private String title;
-    
-    @DTOField(dto = "Read")
-    @DTOField(dto = "Create")
-    private String content;
-}
-```
+@Component
+public class FullHttpOps {
 
-**Generated Files:**
-- `DocumentRepository` - MongoDB repository extending `MongoRepository<Document, String>`
-- `DocumentService` - Service with CRUD methods
-- `DocumentController` - REST controller
-- `DocumentReadDTO`, `DocumentCreateDTO`
-- `DocumentMapper` - MapStruct interface
+    @Endpoint(method = HTTPMethod.GET, path = "/ping")
+    public String ping() { return "pong"; }
 
-## Custom Names and Packages
-
-Customize generated class names and package:
-
-```java
-@CrudGen(
-    controllerPath = "/api/products",
-    dtos = {"Read", "Create", "Update"},
-    controllerName = "ProductRestController",
-    serviceName = "ProductBusinessService",
-    repositoryName = "ProductDataRepository",
-    packageName = "com.example.product.api"
-)
-@Entity
-public class Product {
-    @Id
-    private Long id;
-    
-    @DTOField(dto = "Read")
-    @DTOField(dto = "Create")
-    @DTOField(dto = "Update")
-    private String name;
-}
-```
-
-**Generated Files (in `com.example.product.api` package):**
-- `ProductDataRepository`
-- `ProductBusinessService`
-- `ProductRestController`
-- `ProductReadDTO`, `ProductCreateDTO`, `ProductUpdateDTO`
-- `ProductMapper`
-
-## Extending Interfaces
-
-Extend custom interfaces for generated classes:
-
-```java
-// Custom repository interface
-public interface CustomUserRepository {
-    List<User> findActiveUsers();
-}
-
-// Custom service interface
-public interface UserServiceInterface {
-    User activateUser(Long id);
-}
-
-@CrudGen(
-    controllerPath = "/api/users",
-    dtos = {"Read"},
-    extendRepo = CustomUserRepository.class,
-    extendService = UserServiceInterface.class
-)
-@Entity
-public class User {
-    @Id
-    private Long id;
-    
-    @DTOField(dto = "Read")
-    private String name;
-}
-```
-
-**Generated Files:**
-- `UserRepository` extends `JpaRepository<User, Long>`, `JpaSpecificationExecutor<User>`, and `CustomUserRepository`
-- `UserService` implements `UserServiceInterface` (you need to implement `activateUser` method)
-
-## Field-Based Queries
-
-Generate query methods based on field annotations:
-
-```java
-@CrudGen(
-    controllerPath = "/api/users",
-    dtos = {"Read"}
-)
-@Entity
-public class User {
-    @Id
-    private Long id;
-    
-    @FindBy
-    @DTOField(dto = "Read")
-    private String email;  // Generates findByEmail()
-    
-    @FindAllBy
-    @DTOField(dto = "Read")
-    private String department;  // Generates findAllByDepartment()
-    
-    @DTOField(dto = "Read")
-    private String name;
-}
-```
-
-**Generated Repository Methods:**
-```java
-User findByEmail(String email);
-List<User> findAllByDepartment(String department);
-Page<User> findAllByDepartment(String department, Pageable pageable);
-```
-
-**Generated Service Methods:**
-```java
-User findByEmail(String email);
-List<User> findAllByDepartment(String department);
-Page<User> findAllByDepartmentPaged(String department, Pageable pageable);
-```
-
-**Generated Controller Endpoints:**
-- `GET /api/users/findByEmail?email=user@example.com`
-- `GET /api/users/findAllByDepartment?department=Engineering`
-- `GET /api/users/findAllByDepartment/paged?department=Engineering&page=0&size=20`
-
-## Use Case Controllers
-
-Generate REST controllers for use case services:
-
-```java
-@EndpointGen(controllerPath = "/api/payments")
-public class PaymentService {
-    
-    @Endpoint(method = HTTPMethod.POST, path = "/process")
-    public PaymentResult processPayment(@RequestBody PaymentRequest request) {
-        // Your implementation
-        return paymentProcessor.process(request);
+    @Endpoint(method = HTTPMethod.PUT, path = "/items/{id}")
+    public String putItem(@PathVariable("id") Long id, @RequestBody String body) {
+        return id + ":" + body;
     }
-    
-    @Endpoint(method = HTTPMethod.GET, path = "/status/{id}")
-    public PaymentStatus getPaymentStatus(@PathVariable Long id) {
-        // Your implementation
-        return paymentRepository.getStatus(id);
-    }
-    
-    @Endpoint(method = HTTPMethod.GET, path = "/history")
-    public List<Payment> getPaymentHistory(
-        @RequestParam Long userId,
-        @RequestParam(required = false) LocalDate fromDate
-    ) {
-        // Your implementation
-        return paymentRepository.findByUserIdAndDate(userId, fromDate);
-    }
-    
-    @Endpoint(method = HTTPMethod.DELETE, path = "/cancel/{id}")
-    public void cancelPayment(@PathVariable Long id) {
-        // Your implementation
-        paymentProcessor.cancel(id);
-    }
+
+    @Endpoint(method = HTTPMethod.DELETE, path = "/items/{id}")
+    public void deleteItem(@PathVariable("id") Long id) { }
 }
 ```
 
-**Generated Controller:**
+Void methods return **204**. Non-void → **200** with body.
+
+---
+
+## 9. DTO field rename
+
+**Module:** `MegaProduct.internalTitle` → DTO `displayTitle`
+
 ```java
-@Controller
-@RequestMapping("/api/payments")
-public class PaymentServiceController {
-    private final PaymentService service;
-    private final CrudGenSecurityService securityService;  // if security enabled
-    
-    // Constructor and endpoints...
-}
+@DTOField(dto = "Read", fieldName = "displayTitle")
+@DTOField(dto = "Create", fieldName = "displayTitle")
+@DTOField(dto = "Update", fieldName = "displayTitle")
+private String internalTitle;
 ```
 
-**Generated Endpoints:**
-- `POST /api/payments/process`
-- `GET /api/payments/status/{id}`
-- `GET /api/payments/history?userId=123&fromDate=2024-01-01`
-- `DELETE /api/payments/cancel/{id}`
+MapStruct may warn about unmapped properties — expected unless you add mapping config.
 
-## Security Integration
+---
 
-Implement security service for access control:
+## 10. Security and lifecycle
+
+Implement once in your application:
 
 ```java
 @Service
-public class MySecurityService implements CrudGenSecurityService {
-    
-    @Override
-    public void checkEntityAccess(String entityClassName, String method, Object... params) {
-        // Check if current user can perform method on entity
-        String currentUser = getCurrentUser();
-        
-        switch (method) {
-            case "get":
-            case "getAll":
-            case "getPaged":
-                // Check read permission
-                if (!hasPermission(currentUser, entityClassName, "READ")) {
-                    throw new AccessDeniedException("No read permission");
-                }
-                break;
-            case "create":
-            case "createBatch":
-                // Check create permission
-                if (!hasPermission(currentUser, entityClassName, "CREATE")) {
-                    throw new AccessDeniedException("No create permission");
-                }
-                break;
-            case "update":
-            case "updateBatch":
-                // Check update permission
-                if (!hasPermission(currentUser, entityClassName, "UPDATE")) {
-                    throw new AccessDeniedException("No update permission");
-                }
-                break;
-            case "delete":
-            case "deleteBatch":
-                // Check delete permission
-                if (!hasPermission(currentUser, entityClassName, "DELETE")) {
-                    throw new AccessDeniedException("No delete permission");
-                }
-                break;
-        }
-    }
-    
-    @Override
-    public void checkUseAccess(String method, Object... params) {
-        // Check if current user can call use case method
-        String currentUser = getCurrentUser();
-        if (!hasPermission(currentUser, method, "EXECUTE")) {
-            throw new AccessDeniedException("No permission to execute " + method);
-        }
-    }
-    
-    private String getCurrentUser() {
-        // Get current authenticated user
-        return SecurityContextHolder.getContext().getAuthentication().getName();
-    }
-    
-    private boolean hasPermission(String user, String resource, String action) {
-        // Your permission checking logic
-        return true;  // Implement your logic
-    }
+public class AppSecurity implements CrudGenSecurityService {
+    public void checkEntityAccess(String entityClassName, String method, Object... params) { }
+    public void checkUseAccess(String method, Object... params) { }
+}
+
+@Component
+public class AppLifecycle implements EntityLifecycleCallbacks<MyEntity> {
+    public void beforeCreate(MyEntity e) { }
+    public void afterCreate(MyEntity e) { }
+    /* … remaining hooks … */
 }
 ```
 
-Disable security for specific entities:
+Or disable per entity: `securityService = false`, `lifecycleHooks = false`.
 
-```java
-@CrudGen(
-    controllerPath = "/api/public/products",
-    dtos = {"Read"},
-    securityService = false  // No security checks
-)
-@Entity
-public class Product {
-    // ...
-}
+Test stubs: `AllowAllSecurityService`, `NoopLifecycleCallbacks` in complex sample `support` packages.
+
+---
+
+## Verify examples in this repo
+
+```bash
+./gradlew verifyAllExamples
 ```
 
-## Advanced DTO Configuration
-
-### Different Fields in Different DTOs
-
-```java
-@CrudGen(
-    controllerPath = "/api/users",
-    dtos = {"Read", "Create", "Update"}
-)
-@Entity
-public class User {
-    @Id
-    private Long id;
-    
-    // In all DTOs
-    @DTOField(dto = "Read")
-    @DTOField(dto = "Create")
-    @DTOField(dto = "Update")
-    private String name;
-    
-    // Only in Read and Create (not in Update - email can't be changed)
-    @DTOField(dto = "Read")
-    @DTOField(dto = "Create")
-    @Email
-    private String email;
-    
-    // Only in Create (password never returned or updated via API)
-    @DTOField(dto = "Create")
-    @Size(min = 8)
-    private String password;
-    
-    // Only in Read (auto-generated, not in Create/Update)
-    @DTOField(dto = "Read")
-    private LocalDateTime createdAt;
-    
-    @DTOField(dto = "Read")
-    private LocalDateTime updatedAt;
-    
-    // Internal field, not in any DTO
-    private String passwordHash;
-}
-```
-
-### Custom Field Names in DTOs
-
-```java
-@Entity
-public class User {
-    @Id
-    private Long id;
-    
-    // Field named "name" in entity, but "fullName" in Update DTO
-    @DTOField(dto = "Read")
-    @DTOField(dto = "Create")
-    @DTOField(dto = "Update", fieldName = "fullName")
-    private String name;
-}
-```
-
-This generates:
-- `UserReadDTO` with field `name`
-- `UserCreateDTO` with field `name`
-- `UserUpdateDTO` with field `fullName`
-
-### Validation Annotations
-
-Jakarta Validation annotations are automatically copied to DTO fields:
-
-```java
-@Entity
-public class User {
-    @Id
-    private Long id;
-    
-    @DTOField(dto = "Create")
-    @DTOField(dto = "Update")
-    @NotNull
-    @Size(min = 1, max = 100)
-    private String name;
-    
-    @DTOField(dto = "Create")
-    @Email
-    @NotBlank
-    private String email;
-    
-    @DTOField(dto = "Create")
-    @Min(18)
-    @Max(120)
-    private Integer age;
-}
-```
-
-The generated DTOs will include these validation annotations, and the controller will validate request bodies automatically.
-
-## Complete Example: E-Commerce Application
-
-```java
-// Product Entity
-@CrudGen(
-    controllerPath = "/api/products",
-    dtos = {"Read", "Create", "Update"},
-    service = true
-)
-@Entity
-public class Product {
-    @Id
-    private Long id;
-    
-    @FindBy
-    @DTOField(dto = "Read")
-    @DTOField(dto = "Create")
-    @DTOField(dto = "Update")
-    @NotNull
-    @Size(min = 1, max = 200)
-    private String name;
-    
-    @DTOField(dto = "Read")
-    @DTOField(dto = "Create")
-    @DTOField(dto = "Update")
-    @NotNull
-    @DecimalMin("0.01")
-    private BigDecimal price;
-    
-    @FindAllBy
-    @DTOField(dto = "Read")
-    private Long categoryId;
-    
-    @DTOField(dto = "Read")
-    private Integer stock;
-}
-
-// Order Entity (Repository + Service only)
-@CrudGen(service = true)
-@Entity
-public class Order {
-    @Id
-    private Long id;
-    
-    private Long userId;
-    private BigDecimal total;
-    private OrderStatus status;
-    private LocalDateTime createdAt;
-}
-
-// Payment Use Case Service
-@EndpointGen(controllerPath = "/api/payments")
-public class PaymentService {
-    
-    @Endpoint(method = HTTPMethod.POST, path = "/process")
-    public PaymentResult processPayment(@RequestBody PaymentRequest request) {
-        // Implementation
-    }
-    
-    @Endpoint(method = HTTPMethod.GET, path = "/status/{id}")
-    public PaymentStatus getStatus(@PathVariable Long id) {
-        // Implementation
-    }
-}
-```
-
-This setup generates:
-- Full CRUD API for products with field-based queries
-- Service layer for orders (no controller)
-- Use case controller for payments
-
+Decision logic: [DECISION-TREE.md](DECISION-TREE.md).  
+Failures: [TROUBLESHOOTING.md](TROUBLESHOOTING.md).

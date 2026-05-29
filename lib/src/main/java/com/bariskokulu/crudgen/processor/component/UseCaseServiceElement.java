@@ -33,7 +33,10 @@ public class UseCaseServiceElement extends BaseElement {
 
 	public UseCaseServiceElement(Element element, ProcessingEnvironment processingEnv) {
 		this.element = (TypeElement) element;
-		endpoints = element.getEnclosedElements().stream().filter(t -> t.getKind()==ElementKind.METHOD && t.getAnnotation(Endpoint.class) != null).map(t -> new EndpointElement((ExecutableElement)t)).collect(Collectors.toList());
+		endpoints = element.getEnclosedElements().stream().filter(t -> t.getKind()==ElementKind.METHOD && t.getAnnotation(Endpoint.class) != null).map(t -> new EndpointElement((ExecutableElement)t, processingEnv)).collect(Collectors.toList());
+		if (endpoints.stream().anyMatch(EndpointElement::isInvalid)) {
+			setInvalid(true);
+		}
 		this.name = element.getSimpleName().toString();
 		EndpointGen annotation = element.getAnnotation(EndpointGen.class);
 		this.path = annotation.controllerPath();
@@ -47,6 +50,10 @@ public class UseCaseServiceElement extends BaseElement {
 		}
 		if (Util.isInvalidPackageName(packageName)) {
 			Util.error("Invalid package name: " + packageName, processingEnv);
+			setInvalid(true);
+		}
+		if (Util.isBlank(path) || !path.startsWith("/")) {
+			Util.error("EndpointGen controllerPath must start with '/': " + path, processingEnv);
 			setInvalid(true);
 		}
 

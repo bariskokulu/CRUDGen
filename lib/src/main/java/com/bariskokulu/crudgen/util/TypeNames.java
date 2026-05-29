@@ -25,6 +25,7 @@ public class TypeNames {
 	public static ClassName CONSTRAINT_VIOLATION = ClassName.bestGuess("jakarta.validation.ConstraintViolation");
 	public static final ClassName PAGE_REQUEST = ClassName.bestGuess("org.springframework.data.domain.PageRequest");
 	public static ClassName VALID = ClassName.bestGuess("jakarta.validation.Valid");
+	public static final ClassName VALIDATED = ClassName.bestGuess("org.springframework.validation.annotation.Validated");
 	public static final ClassName MAPPER = ClassName.bestGuess("org.mapstruct.Mapper");
 	public static final ClassName BEAN_MAPPING = ClassName.bestGuess("org.mapstruct.BeanMapping");
 	public static final ClassName MAPPING_TARGET = ClassName.bestGuess("org.mapstruct.MappingTarget");
@@ -41,9 +42,12 @@ public class TypeNames {
 	public static final ClassName HTTP_STATUS = ClassName.bestGuess("org.springframework.http.HttpStatus");
 	public static ClassName MIN = ClassName.bestGuess("jakarta.validation.constraints.Min");
 	public static ClassName MAX = ClassName.bestGuess("jakarta.validation.constraints.Max");
+	public static ClassName SIZE = ClassName.bestGuess("jakarta.validation.constraints.Size");
 	public static ClassName CONSTRAINT_EXCEPTION = ClassName.bestGuess("jakarta.validation.ConstraintViolationException");
 	public static final ClassName TRANSACTIONAL = ClassName.bestGuess("org.springframework.transaction.annotation.Transactional");
 	public static ClassName JSON_PROCESSING_EXCEPTION = ClassName.bestGuess("com.fasterxml.jackson.core.JsonProcessingException");
+	public static ClassName JSON_CREATOR = ClassName.bestGuess("com.fasterxml.jackson.annotation.JsonCreator");
+	public static ClassName JSON_PROPERTY = ClassName.bestGuess("com.fasterxml.jackson.annotation.JsonProperty");
 	public static final ClassName JSON_PATCH_EXCEPTION = ClassName.bestGuess("com.flipkart.zjsonpatch.JsonPatchApplicationException");
 	public static final ClassName LOGGER = ClassName.bestGuess("org.slf4j.Logger");
 	public static final ClassName LOGGER_FACTORY = ClassName.bestGuess("org.slf4j.LoggerFactory");
@@ -59,19 +63,17 @@ public class TypeNames {
 	public static final ClassName PARAMETER_IN = ClassName.bestGuess("io.swagger.v3.oas.annotations.enums.ParameterIn");
 	public static final ClassName REQUEST_BODY_OPENAPI = ClassName.bestGuess("io.swagger.v3.oas.annotations.parameters.RequestBody");
 
-	private static boolean initialized;
-
 	public static boolean validateJsonPatchStack(ProcessingEnvironment env) {
 		Elements elements = env.getElementUtils();
-		if (elements.getTypeElement(OBJECT_MAPPER.canonicalName()) == null) {
+		if (!hasJacksonDatabind(elements)) {
 			Util.error("Update DTO needs Jackson databind on the compile classpath (e.g. spring-boot-starter-json).", env);
 			return false;
 		}
-		if (elements.getTypeElement(JSON_NODE.canonicalName()) == null) {
+		if (!hasJacksonJsonNode(elements)) {
 			Util.error("Update DTO needs jackson-databind JsonNode on the compile classpath.", env);
 			return false;
 		}
-		if (elements.getTypeElement(JSON_PROCESSING_EXCEPTION.canonicalName()) == null) {
+		if (!hasJacksonProcessingException(elements)) {
 			Util.error("Update DTO needs Jackson core exception types on the compile classpath.", env);
 			return false;
 		}
@@ -90,27 +92,65 @@ public class TypeNames {
 		return true;
 	}
 
+	private static boolean hasJacksonJsonNode(Elements elements) {
+		return elements.getTypeElement(JSON_NODE.canonicalName()) != null
+				|| elements.getTypeElement("tools.jackson.databind.JsonNode") != null
+				|| elements.getTypeElement("com.fasterxml.jackson.databind.JsonNode") != null;
+	}
+
+	private static boolean hasJacksonProcessingException(Elements elements) {
+		return elements.getTypeElement(JSON_PROCESSING_EXCEPTION.canonicalName()) != null
+				|| elements.getTypeElement("tools.jackson.core.JacksonException") != null
+				|| elements.getTypeElement("com.fasterxml.jackson.core.JsonProcessingException") != null;
+	}
+
+	private static boolean hasJacksonDatabind(Elements elements) {
+		return elements.getTypeElement(OBJECT_MAPPER.canonicalName()) != null
+				|| elements.getTypeElement("tools.jackson.databind.ObjectMapper") != null
+				|| elements.getTypeElement("tools.jackson.databind.json.JsonMapper") != null
+				|| elements.getTypeElement("com.fasterxml.jackson.databind.ObjectMapper") != null;
+	}
+
+	private static ClassName resolveJsonNodeClass(Elements elements, String... candidates) {
+		for (String candidate : candidates) {
+			if (elements.getTypeElement(candidate) != null) {
+				return ClassName.bestGuess(candidate);
+			}
+		}
+		return JSON_NODE;
+	}
+
 	private static void configureJackson(ProcessingEnvironment env) {
 		Elements elements = env.getElementUtils();
 		TypeElement om3 = elements.getTypeElement("tools.jackson.databind.ObjectMapper");
-		boolean useJackson3 = om3 != null;
+		TypeElement jsonMapper3 = elements.getTypeElement("tools.jackson.databind.json.JsonMapper");
+		boolean useJackson3 = (om3 != null || jsonMapper3 != null)
+				&& hasJacksonJsonNode(elements)
+				&& elements.getTypeElement("tools.jackson.databind.JsonNode") != null
+				&& elements.getTypeElement("com.flipkart.zjsonpatch.Jackson3JsonPatch") != null;
 		if (useJackson3) {
-			OBJECT_MAPPER = ClassName.bestGuess("tools.jackson.databind.ObjectMapper");
+			OBJECT_MAPPER = om3 != null
+					? ClassName.bestGuess("tools.jackson.databind.ObjectMapper")
+					: ClassName.bestGuess("tools.jackson.databind.json.JsonMapper");
 			JSON_NODE = ClassName.bestGuess("tools.jackson.databind.JsonNode");
 			JSON_PATCH = ClassName.bestGuess("com.flipkart.zjsonpatch.Jackson3JsonPatch");
-			JSON_PROCESSING_EXCEPTION = ClassName.bestGuess("tools.jackson.core.JacksonException");
+			JSON_PROCESSING_EXCEPTION = resolveJsonNodeClass(elements,
+					"tools.jackson.core.JacksonException", "com.fasterxml.jackson.core.JsonProcessingException");
+			JSON_CREATOR = resolveJsonNodeClass(elements,
+					"tools.jackson.annotation.JsonCreator", "com.fasterxml.jackson.annotation.JsonCreator");
+			JSON_PROPERTY = resolveJsonNodeClass(elements,
+					"tools.jackson.annotation.JsonProperty", "com.fasterxml.jackson.annotation.JsonProperty");
 		} else {
 			OBJECT_MAPPER = ClassName.bestGuess("com.fasterxml.jackson.databind.ObjectMapper");
 			JSON_NODE = ClassName.bestGuess("com.fasterxml.jackson.databind.JsonNode");
 			JSON_PATCH = ClassName.bestGuess("com.flipkart.zjsonpatch.JsonPatch");
 			JSON_PROCESSING_EXCEPTION = ClassName.bestGuess("com.fasterxml.jackson.core.JsonProcessingException");
+			JSON_CREATOR = ClassName.bestGuess("com.fasterxml.jackson.annotation.JsonCreator");
+			JSON_PROPERTY = ClassName.bestGuess("com.fasterxml.jackson.annotation.JsonProperty");
 		}
 	}
 
 	public static synchronized void init(ProcessingEnvironment env) {
-		if (initialized) {
-			return;
-		}
 		Elements elements = env.getElementUtils();
 		TypeElement jakartaValidator = elements.getTypeElement("jakarta.validation.Validator");
 		TypeElement javaxValidator = elements.getTypeElement("javax.validation.Validator");
@@ -125,9 +165,9 @@ public class TypeNames {
 		VALID = ClassName.bestGuess(prefix + ".validation.Valid");
 		MIN = ClassName.bestGuess(prefix + ".validation.constraints.Min");
 		MAX = ClassName.bestGuess(prefix + ".validation.constraints.Max");
+		SIZE = ClassName.bestGuess(prefix + ".validation.constraints.Size");
 		CONSTRAINT_EXCEPTION = ClassName.bestGuess(prefix + ".validation.ConstraintViolationException");
 		configureJackson(env);
-		initialized = true;
 	}
 
 }
