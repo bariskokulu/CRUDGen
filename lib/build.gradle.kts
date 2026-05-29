@@ -1,7 +1,6 @@
 plugins {
     `java-library`
-	signing
- //   id("com.gradleup.shadow") version "9.2.2"
+    signing
     id("com.vanniktech.maven.publish") version "0.34.0"
 }
 
@@ -17,16 +16,17 @@ dependencies {
     compileOnly("org.projectlombok:lombok:1.18.42")
     annotationProcessor("org.projectlombok:lombok:1.18.42")
     implementation("com.squareup:javapoet:1.13.0")
-    compileOnly("com.google.auto.service:auto-service:1.1.1")
-    annotationProcessor("com.google.auto.service:auto-service:1.1.1")
 }
 
 java {
     withSourcesJar()
-   //   withJavadocJar()
     toolchain {
-        languageVersion.set(JavaLanguageVersion.of(25))
+        languageVersion.set(JavaLanguageVersion.of(26))
     }
+}
+
+tasks.withType<JavaCompile>().configureEach {
+    options.release.set(8)
 }
 
 signing {
@@ -37,17 +37,6 @@ signing {
 mavenPublishing {
     coordinates(group.toString(), artifactId, version.toString())
     publishToMavenCentral()
-   
-  //  publishToMavenCentral(
-   //     com.vanniktech.maven.publish.central.CentralPortal(
-   //         username = providers.gradleProperty("mavenCentralUsername").orElse(""),
-   //         password = providers.gradleProperty("mavenCentralPassword").orElse("")
-   //     )
-   // )
-	
-	  
-  //  publishToMavenCentral(SonatypeHost.DEFAULT)
-   
     signAllPublications()
     pom {
         name.set("CRUDGen")
@@ -56,8 +45,8 @@ mavenPublishing {
         url.set("https://github.com/bariskokulu/CRUDGen")
         licenses {
             license {
-                name.set("MIT License")
-                url.set("https://opensource.org/licenses/MIT")
+                name.set("Apache License, Version 2.0")
+                url.set("https://www.apache.org/licenses/LICENSE-2.0")
                 distribution.set("repo")
             }
         }

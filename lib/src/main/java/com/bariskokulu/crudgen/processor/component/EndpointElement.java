@@ -7,7 +7,7 @@ import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
 
-import com.bariskokulu.crudgen.annotation.http.Endpoint;
+import com.bariskokulu.crudgen.annotation.Endpoint;
 import com.bariskokulu.crudgen.util.HTTPMethod;
 
 import lombok.Getter;

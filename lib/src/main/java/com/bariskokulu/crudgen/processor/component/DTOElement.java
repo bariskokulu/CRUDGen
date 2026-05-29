@@ -8,7 +8,7 @@ import java.util.stream.Collectors;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ElementKind;
 
-import com.bariskokulu.crudgen.annotation.http.DTOField;
+import com.bariskokulu.crudgen.annotation.DTOField;
 import com.squareup.javapoet.ClassName;
 
 import lombok.Getter;

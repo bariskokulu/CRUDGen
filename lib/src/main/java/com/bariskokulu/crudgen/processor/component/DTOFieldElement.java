@@ -3,7 +3,8 @@ package com.bariskokulu.crudgen.processor.component;
 import javax.lang.model.element.Element;
 import javax.lang.model.type.TypeMirror;
 
-import com.bariskokulu.crudgen.annotation.http.DTOField;
+import com.bariskokulu.crudgen.annotation.DTOField;
+import com.bariskokulu.crudgen.util.Util;
 
 import lombok.Getter;
 
@@ -18,7 +19,7 @@ public class DTOFieldElement extends BaseElement {
 	public DTOFieldElement(Element element, DTOField annotation) {
 		this.element = element;
 		this.type = element.asType();
-		this.name = annotation.fieldName().isBlank() ? element.getSimpleName().toString() : annotation.fieldName();
+		this.name = Util.isBlank(annotation.fieldName()) ? element.getSimpleName().toString() : annotation.fieldName();
 		this.nameCapitalized = name.substring(0, 1).toUpperCase() + name.substring(1);
 	}
 	

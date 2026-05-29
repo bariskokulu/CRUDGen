@@ -7,6 +7,7 @@ public enum RepoType {
 
 	JPA,
 	MONGO,
+	PLAIN,
 	;
-	
+
 }

@@ -27,17 +27,36 @@ public class Util {
 		processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, text);
 	}
 
+	public static boolean isBlank(String s) {
+		return s == null || s.trim().isEmpty();
+	}
+
 	public static void saveFile(String path, TypeSpec typeSpec, ProcessingEnvironment processingEnv) {
 		JavaFile javaFile = JavaFile.builder(path, typeSpec).build();
-		
-		// yes this is necessary because otherwise it somehow conflicts with classes generated in the previous build ( not the previous processing round )
-		javaFile.toJavaFileObject().delete();
 		try {
 			javaFile.writeTo(processingEnv.getFiler());
 		} catch (IOException e) {
 			error("Failed to save file: "+path, processingEnv);
-			e.printStackTrace();
+			error(e.getMessage(), processingEnv);
 		}
+	}
+	
+	public static boolean isInvalidJavaIdentifier(String name) {
+	    if(name == null || name.isEmpty()) return true;
+	    if(!Character.isJavaIdentifierStart(name.charAt(0))) return true;
+	    for(int i = 1; i < name.length(); i++) {
+	        if (!Character.isJavaIdentifierPart(name.charAt(i))) return true;
+	    }
+	    return false;
+	}
+
+	public static boolean isInvalidPackageName(String packageName) {
+	    if(packageName == null || packageName.isEmpty()) return true;
+	    String[] parts = packageName.split("\\.");
+	    for(String part : parts) {
+	        if(isInvalidJavaIdentifier(part)) return true;
+	    }
+	    return false;
 	}
 	
 }
