@@ -1,6 +1,5 @@
 package com.bariskokulu.crudgen.processor.generator;
 
-import java.util.ArrayList;
 import java.util.List;
 
 import javax.annotation.processing.ProcessingEnvironment;
@@ -29,30 +28,13 @@ public class EntityServiceGenerator {
 		if(element.getExtendServiceTypeName() != null) {
 			clazz.addSuperinterface(element.getExtendServiceTypeName());
 		}
-		clazz.addField(FieldSpec.builder(element.getRepoTypeName(), "repo", Modifier.PRIVATE, Modifier.FINAL).build());
+		clazz.addField(FieldSpec.builder(element.getEffectiveRepoTypeName(), "repo", Modifier.PRIVATE, Modifier.FINAL).build());
 		if(element.isLogging()) {
 			clazz.addField(FieldSpec.builder(TypeNames.LOGGER, "logger", Modifier.PRIVATE, Modifier.STATIC, Modifier.FINAL).initializer("$T.getLogger($T.class)", TypeNames.LOGGER_FACTORY, element.getServiceTypeName()).build());
 		}
-		if(element.isLifecycleHooks()) {
-		    clazz.addField(FieldSpec.builder(ParameterizedTypeName.get(
-			        TypeNames.LIFECYCLE_CALLBACKS_INTERFACE,
-			        element.getTypeName()
-			    ), "lifecycleCallbacks", 
-		        Modifier.PRIVATE, Modifier.FINAL)
-		        .build());
-		}
 		MethodSpec.Builder constructor = MethodSpec.constructorBuilder().addModifiers(Modifier.PUBLIC)
-				.addParameter(element.getRepoTypeName(), "repo")
+				.addParameter(element.getEffectiveRepoTypeName(), "repo")
 				.addStatement("this.repo = repo");
-		if (element.isLifecycleHooks()) {
-			constructor.addParameter(
-					ParameterSpec.builder(ParameterizedTypeName.get(
-							TypeNames.LIFECYCLE_CALLBACKS_INTERFACE,
-							element.getTypeName()), "lifecycleCallbacks")
-							.addAnnotation(ClassName.get("org.springframework.lang", "Nullable"))
-							.build());
-			constructor.addStatement("this.lifecycleCallbacks = lifecycleCallbacks");
-		}
 		clazz.addMethod(constructor.build());
 		clazz.addMethod(MethodSpec.methodBuilder("get")
 				.addModifiers(Modifier.PUBLIC)
@@ -80,47 +62,24 @@ public class EntityServiceGenerator {
 				.addStatement("return page")
 				.returns(ParameterizedTypeName.get(TypeNames.PAGE, element.getTypeName()))
 				.build());
-		MethodSpec.Builder deleteBuilder = MethodSpec.methodBuilder("delete")
+		clazz.addMethod(MethodSpec.methodBuilder("delete")
 				.addAnnotation(TypeNames.TRANSACTIONAL)
 				.addModifiers(Modifier.PUBLIC)
 				.addParameter(element.getIdTypeName(), "id")
 				.addCode(checkThenAddLog(element, "delete() called with id: {}", "id"))
-				.addStatement("$T entity = repo.findById(id).orElse(null)", element.getTypeName());
-		if (element.isLifecycleHooks()) {
-			deleteBuilder.addCode("if(entity != null && lifecycleCallbacks != null) {\n"
-					+ "    lifecycleCallbacks.beforeDelete(entity);\n"
-					+ "}\n");
-		}
-		deleteBuilder.addStatement("repo.deleteById(id)");
-		if (element.isLifecycleHooks()) {
-			deleteBuilder.addCode("if(entity != null && lifecycleCallbacks != null) {\n"
-					+ "    lifecycleCallbacks.afterDelete(entity);\n"
-					+ "}\n");
-		}
-		clazz.addMethod(deleteBuilder.addCode(checkThenAddLog(element, "delete() completed for id: {}", "id")).build());
-		MethodSpec.Builder deleteAllBuilder = MethodSpec.methodBuilder("deleteAll")
+				.addStatement("repo.deleteById(id)")
+				.addCode(checkThenAddLog(element, "delete() completed for id: {}", "id"))
+				.build());
+		clazz.addMethod(MethodSpec.methodBuilder("deleteAll")
 				.addAnnotation(TypeNames.TRANSACTIONAL)
 				.addModifiers(Modifier.PUBLIC)
 				.addParameter(ParameterSpec.builder(
 						ParameterizedTypeName.get(ClassName.get(List.class), element.getIdTypeName()),
 						"ids").build())
-				.addCode(checkThenAddLog(element, "deleteAll() called with ids: {}", "ids"));
-		if (element.isLifecycleHooks()) {
-			deleteAllBuilder.addStatement("$T toDelete = new $T<>()", ParameterizedTypeName.get(ClassName.get(List.class), element.getTypeName()), ClassName.get(ArrayList.class));
-			deleteAllBuilder.addCode("for ($T id : ids) {\n", element.getIdTypeName());
-			deleteAllBuilder.addStatement("  repo.findById(id).ifPresent(toDelete::add)");
-			deleteAllBuilder.addCode("}\n");
-			deleteAllBuilder.addCode("if (lifecycleCallbacks != null && !toDelete.isEmpty()) {\n"
-					+ "  lifecycleCallbacks.beforeDeleteBatch(toDelete);\n"
-					+ "}\n");
-		}
-		deleteAllBuilder.addStatement("repo.deleteAllById(ids)");
-		if (element.isLifecycleHooks()) {
-			deleteAllBuilder.addCode("if (lifecycleCallbacks != null && !toDelete.isEmpty()) {\n"
-					+ "  lifecycleCallbacks.afterDeleteBatch(toDelete);\n"
-					+ "}\n");
-		}
-		clazz.addMethod(deleteAllBuilder.addCode(checkThenAddLog(element, "deleteAll() completed for ids: {}", "ids")).build());
+				.addCode(checkThenAddLog(element, "deleteAll() called with ids: {}", "ids"))
+				.addStatement("repo.deleteAllById(ids)")
+				.addCode(checkThenAddLog(element, "deleteAll() completed for ids: {}", "ids"))
+				.build());
 		clazz.addMethod(MethodSpec.methodBuilder("save").addModifiers(Modifier.PUBLIC)
 				.addAnnotation(TypeNames.TRANSACTIONAL)
 				.addParameter(ParameterSpec.builder(element.getTypeName(), "entity").build())

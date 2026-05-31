@@ -6,10 +6,10 @@
 
 **Checks:**
 
-1. CRUDGen on `annotationProcessor` (Gradle) or `annotationProcessorPaths` (Maven), not only `compileOnly`.
-2. Processor order: **Lombok → MapStruct → CRUDGen**.
+1. CrudGen on `annotationProcessor` (Gradle) or `annotationProcessorPaths` (Maven), not only `compileOnly`.
+2. Order: **Lombok → MapStruct → CrudGen**.
 3. IDE: enable annotation processing; delegate build to Gradle if generated sources are stale.
-4. Clean rebuild: `./gradlew clean compileJava`.
+4. Clean rebuild: `./gradlew clean compileJava` (or your build tool equivalent).
 
 ---
 
@@ -17,7 +17,7 @@
 
 `controllerPath` is set but `dtos` omits `"Read"` or no field has `@DTOField(dto = "Read")`.
 
-Fix: add `"Read"` to `dtos` and mark at least one field with `@DTOField(dto = "Read")`.
+**Fix:** add `"Read"` to `dtos` and at least one `@DTOField(dto = "Read")`.
 
 ---
 
@@ -27,8 +27,8 @@ Fix: add `"Read"` to `dtos` and mark at least one field with `@DTOField(dto = "R
 
 **Cause:** `"Update"` in `dtos` requires Jackson databind + zjsonpatch on the **compile** classpath.
 
-| Stack | zjsonpatch coordinate |
-|-------|------------------------|
+| Stack | zjsonpatch |
+|-------|------------|
 | Boot 3 / Jackson 2 | `com.flipkart.zjsonpatch:zjsonpatch:0.4.16` |
 | Boot 4 / Jackson 3 | `io.github.vishwakarma:zjsonpatch:0.6.2` |
 
@@ -38,22 +38,20 @@ If you do not need PATCH, remove `"Update"` from `dtos`.
 
 ## MapStruct “Unmapped target property” warnings
 
-Common with `@DTOField(fieldName = "…")` or when id is not in DTOs. Complex samples intentionally trigger these; warnings do not fail the build.
+Common with `@DTOField(fieldName = "…")` or when `id` is not in DTOs. Warnings do not fail the build.
 
-To silence: add MapStruct `@Mapping` in a custom mapper decorator or adjust DTO field coverage.
+To silence: add MapStruct `@Mapping` in a decorator or widen DTO field coverage.
 
 ---
 
 ## `NoSuchBeanDefinitionException: CrudGenSecurityService`
 
-Generated controller expects security when `securityService = true` (default).
+Generated controllers call security when `securityService = true` (default).
 
-Fix one of:
+**Fix:**
 
-- Register a `@Service` implementing `CrudGenSecurityService`.
-- Set `securityService = false` on every `@CrudGen` / `@EndpointGen` type (then the interface is not generated).
-
-Sample: `AllowAllSecurityService` in complex modules’ test `support` package.
+- Register `@Service` implementing `CrudGenSecurityService`, or
+- Set `securityService = false` on **every** `@CrudGen` and `@EndpointGen` type (interface then not generated).
 
 ---
 
@@ -61,15 +59,15 @@ Sample: `AllowAllSecurityService` in complex modules’ test `support` package.
 
 Same pattern as security — implement `EntityLifecycleCallbacks<T>` or set `lifecycleHooks = false` on all entities.
 
-Sample: `NoopLifecycleCallbacks`.
-
 ---
 
-## MongoDB in tests: `NoSuchBeanDefinitionException: mongoTemplate`
+## MongoDB in tests without a server
 
-**Symptoms:** `@SpringBootTest` fails when a `@CrudGen(repo = MONGO)` entity is on the classpath but no MongoDB runs.
+**Symptoms:** `@SpringBootTest` fails for `@CrudGen(repo = MONGO)` when MongoDB is not running.
 
-**Fix (Boot 4):** exclude autoconfig:
+**Fix:** exclude Mongo autoconfig and disable repository auto-config, or provide a test double of your generated repository.
+
+Boot 4 example property:
 
 ```properties
 spring.autoconfigure.exclude=\
@@ -79,39 +77,30 @@ spring.autoconfigure.exclude=\
 spring.data.mongodb.repositories.enabled=false
 ```
 
-Or in `@SpringBootApplication(exclude = { … })` with the same classes.
+Boot 3 uses `org.springframework.boot.autoconfigure.mongo.MongoAutoConfiguration` and `MongoRepositoriesAutoConfiguration` (different package names).
 
-**Boot 3** uses `org.springframework.boot.autoconfigure.mongo.MongoAutoConfiguration` and `MongoRepositoriesAutoConfiguration` (package differs from Boot 4).
-
-Provide a `@Primary` `@Bean` mock of your generated `MongoTagRepository` for HTTP tests, and exclude the entity class from JPA scan if it is not a JPA entity. See `ComplexBoot4TestApplication` and `MongoTagTestSupport` in [complex-boot4](../samples/complex-boot4).
+For HTTP tests, supply a `@Primary` mock/stub of the generated `MongoRepository` interface.
 
 ---
 
-## Path variable: `Name for argument … not specified`
+## Path variable: name not specified
 
 Spring cannot infer parameter names without debug symbols.
 
-Fix: explicit names:
-
-```java
-@GetMapping("/by-key/{externalKey}")
-public ResponseEntity<?> byKey(@PathVariable("externalKey") String externalKey)
-```
-
-Or compile with `-parameters`.
+**Fix:** `@PathVariable("id")` or compile with `-parameters`.
 
 ---
 
 ## `@Endpoint` path validation errors
 
 - Path must start with `/`.
-- Each `{token}` in the path must match a method parameter **name** exactly.
+- Each `{token}` must match a method parameter **name**.
 
 ---
 
 ## `findBy*` returns 404
 
-By design: generated `findBy{Field}` controller methods return **404** when the repository returns null.
+Generated `findBy{Field}` returns **404** when the repository returns null. Multiple DB rows for a `findBy` query are a persistence-layer exception, not a 409 from CrudGen.
 
 ---
 
@@ -122,37 +111,50 @@ By design: generated `findBy{Field}` controller methods return **404** when the 
 
 ---
 
-## H2 tests: GET by id fails after POST
+## PATCH 400 after relation ids
 
-H2 `IDENTITY` does not reset on `deleteAll()`. Next insert may get id 2 while tests expect id 1.
-
-Fix: reset sequence in `@BeforeEach`:
-
-```sql
-ALTER TABLE simple_widget ALTER COLUMN id RESTART WITH 1
-```
-
-Or parse the id from the create response / query list instead of hardcoding `1`. Simple samples use the `ALTER TABLE` approach.
+Missing or invalid FK in Create/Update/PATCH → **400** from relation applier. Related entity must be `@CrudGen` with a resolvable `findById`.
 
 ---
 
-## Boot 3 vs Boot 4 sample differences
+## `customController` + `relation=true`
+
+Compile error unless you invoke `{Entity}RelationApplier` in your controller/service.
+
+---
+
+## `extendRepo` compile error
+
+`extendRepo` must be a supertype of the contract for `repo` (e.g. `JpaRepository<Entity, Long>` for `JPA`). This does **not** apply to `customRepo` — only when the processor generates a repository.
+
+## `customRepo` compile or runtime errors
+
+Generated service calls PLAIN-style methods on your type (`findById`, `save`, …). Missing methods fail at compile time; wrong signatures fail at runtime. Your type need not extend Spring Data repository interfaces.
+
+---
+
+## H2: GET by id fails after DELETE ALL
+
+H2 `IDENTITY` may not reset on `deleteAll()`. Next insert can get id 2 while tests expect id 1.
+
+**Fix:** reset sequence in test setup, or use ids from create responses instead of hardcoding `1`.
+
+---
+
+## Boot 3 vs Boot 4 dependency matrix
 
 | Area | Boot 3 | Boot 4 |
 |------|--------|--------|
-| Web starter | `spring-boot-starter-web` | `spring-boot-starter-webmvc` |
-| Test starter | `spring-boot-starter-test` | `spring-boot-starter-webmvc-test` |
+| Web | `spring-boot-starter-web` | `spring-boot-starter-webmvc` |
 | MapStruct | 1.5.5.Final | 1.6.3 |
 | JSON Patch | zjsonpatch 0.4.x | zjsonpatch 0.6.2 |
 | Mongo autoconfig packages | `…autoconfigure.mongo…` | `…boot.mongodb…` / `…boot.data.mongodb…` |
-
-Samples are duplicated per Boot version — do not symlink or copy sources between them.
 
 ---
 
 ## Still stuck
 
-1. Run `./gradlew :your-module:compileJava --info` and read processor messages.
+1. Rebuild with `--info` and read annotation processor messages.
 2. Inspect `build/generated/sources/annotationProcessor/java/main`.
-3. Compare with [samples/complex-boot3](../samples/complex-boot3) for a working baseline.
-4. Open an issue with entity source, `build.gradle`, and the first processor/compile error.
+3. Compare your entity against [EXAMPLES.md](EXAMPLES.md) minimal and full profiles.
+4. Report: entity source, dependencies, first processor/compile error.

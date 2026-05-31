@@ -1,47 +1,25 @@
-# complex-boot4
+# Maximal usage — Spring Boot 4
 
-**Purpose:** Same full CRUDGen matrix as [complex-boot3](../complex-boot3/), validated on **Spring Boot 4**.
+Same **maximal** library profile as [complex-boot3](../complex-boot3/): every annotation option, validated on Spring Boot 4.
 
 ## Stack
 
-- Spring Boot **4.0.5**
-- `spring-boot-starter-webmvc` / `spring-boot-starter-webmvc-test`
-- MapStruct **1.6.3**
-- **zjsonpatch 0.6.2** (Jackson 3)
-- H2 + mocked Mongo (no real MongoDB in tests)
+- Spring Boot **4.0.5**, `spring-boot-starter-webmvc`
+- MapStruct **1.6.3**, zjsonpatch **0.6.2** (Jackson 3)
+- H2 + mocked Mongo repository in tests (no real MongoDB)
 
-This module is **standalone**: its `src/main` and `src/test` trees are not linked to complex-boot3.
+Standalone `src/main` and `src/test` — not linked to complex-boot3.
 
-## Boot 4 specifics (tests)
+## Boot 4 test wiring
 
-Mongo must not start in the H2 test context. `ComplexBoot4TestApplication` excludes:
+Exclude Mongo autoconfig in the test application (`MongoAutoConfiguration`, `DataMongoAutoConfiguration`, `DataMongoRepositoriesAutoConfiguration`). Provide `@Primary` mock of generated `MongoTagRepository`. Exclude non-JPA `MongoTag` from JPA entity scan if needed.
 
-- `org.springframework.boot.mongodb.autoconfigure.MongoAutoConfiguration`
-- `org.springframework.boot.data.mongodb.autoconfigure.DataMongoAutoConfiguration`
-- `org.springframework.boot.data.mongodb.autoconfigure.DataMongoRepositoriesAutoConfiguration`
+Entity/feature matrix: same as [complex-boot3/README.md](../complex-boot3/README.md) (MegaProduct, ManualShelf, MongoTag, PlainCustomer, BespokeItem, HeadlessTask, FullHttpOps, EdgeOps).
 
-`application-test.properties` repeats the same excludes and sets `spring.data.mongodb.repositories.enabled=false`. `MongoTag` is filtered from entity scan; `MongoTagTestSupport` supplies a `@Primary` mock `MongoTagRepository`.
+## Tests
 
-## Entities and tests
+24 tests — same areas as complex-boot3.
 
-Same catalog as complex-boot3 — see [complex-boot3/README.md](../complex-boot3/README.md) for the entity → feature table.
+## Docs
 
-| Tests | Count |
-|-------|-------|
-| All complex-boot3 test classes (Boot 4 copies) | 19 |
-
-Notable classes: `MegaProductWebTest` (includes `PATCH /batch`), `MongoTagWebTest` (create, patch, findBy, findAllBy), `BespokeItemWebTest` (custom controller + generated service).
-
-## Commands
-
-```bash
-./gradlew :samples:complex-boot4:compileJava
-./gradlew :samples:complex-boot4:test
-```
-
-## When to use this module
-
-- Regression-test CRUDGen after Boot 4 / Jackson 3 upgrades.
-- Copy test patterns for excluding Mongo autoconfig while keeping a `@CrudGen(repo = MONGO)` entity on the classpath.
-
-Minimal sample: [simple-boot4](../simple-boot4/).
+[docs/EXAMPLES.md](../../docs/EXAMPLES.md) §11, [docs/TROUBLESHOOTING.md](../../docs/TROUBLESHOOTING.md) (Boot 4 Mongo exclusions).

@@ -1,51 +1,35 @@
-# Sample modules
+# Reference applications
 
-These four Gradle projects exist to **prove CRUDGen works** at compile time and at runtime. They are not a shared library and they do not share source directories.
+Optional Gradle projects that demonstrate **`io.github.bariskokulu:crudgen`** at compile time and runtime. They are not part of the published JAR; copy patterns into your own app.
 
-## Layout
+## Tiers
 
-```
-samples/
-├── simple-boot3/     Minimal HTTP CRUD (Boot 3.2.9)
-├── simple-boot4/     Same intent (Boot 4.0.5)
-├── complex-boot3/    Full processor surface (Boot 3.2.9)
-└── complex-boot4/    Full processor surface (Boot 4.0.5)
-```
+| Tier | Modules | Library meaning |
+|------|---------|-----------------|
+| **Minimal** | `simple-boot3`, `simple-boot4` | Smallest useful setup: one JPA entity, `Read`+`Create`, HTTP CRUD, security/lifecycle/OpenAPI/logging off |
+| **Maximal** | `complex-boot3`, `complex-boot4` | Every processor option: all DTOs, PATCH batch, relations, queries, `RepoType` variants, `custom*` / `extend*`, `@EndpointGen` |
 
-Each module depends only on `:lib` (annotation processor) and its own Spring Boot BOM. **simple-boot3** and **simple-boot4** are separate file trees; **complex-boot3** and **complex-boot4** are separate file trees with the same feature matrix written twice.
+Boot 3 and Boot 4 pairs are the **same tier** on different stacks (Jackson 2 vs 3, autoconfigure package names). Sources are **not** shared between Boot versions.
 
-## Which module to open
+## Which module to read
 
-| Goal | Module |
-|------|--------|
-| “How little code do I need for a REST API?” | `simple-boot3` or `simple-boot4` |
-| “Show me every annotation and option” | `complex-boot3` or `complex-boot4` |
-| Boot 3 / Jackson 2 / `javax` or mixed validation | `*-boot3` |
-| Boot 4 / Jackson 3 / modular autoconfigure | `*-boot4` |
+| Your stack | Minimal | Maximal |
+|------------|---------|---------|
+| Spring Boot 3 | `simple-boot3` | `complex-boot3` |
+| Spring Boot 4 | `simple-boot4` | `complex-boot4` |
 
-## Verify everything
+Human walkthrough: [docs/EXAMPLES.md](../docs/EXAMPLES.md).
 
-From repository root:
+## Per-module README
 
-```bash
-./gradlew verifyAllExamples
-```
+- [simple-boot3](simple-boot3/README.md) — minimal Boot 3
+- [simple-boot4](simple-boot4/README.md) — minimal Boot 4
+- [complex-boot3](complex-boot3/README.md) — maximal Boot 3
+- [complex-boot4](complex-boot4/README.md) — maximal Boot 4
 
-| Task | What it does |
-|------|----------------|
-| `compileAllExamples` | Processor runs; all four modules compile |
-| `testAllExamples` | Spring Boot + H2 + MockMvc integration tests |
-| `verifyAllExamples` | Both |
+## Tests (approx.)
 
-Windows: `gradlew.bat verifyAllExamples`
-
-## Test counts (approx.)
-
-| Module | Tests | Stack |
-|--------|-------|-------|
-| simple-boot3 | 7 | H2, MockMvc |
-| simple-boot4 | 7 | H2, MockMvc |
-| complex-boot3 | 19 | H2, mocked Mongo repo, MockMvc |
-| complex-boot4 | 19 | H2, mocked Mongo repo, MockMvc |
-
-Per-module READMEs describe entities, endpoints, and what each test class covers.
+| Module | Tests |
+|--------|-------|
+| simple-boot3 / simple-boot4 | 7 each |
+| complex-boot3 / complex-boot4 | 24 each |

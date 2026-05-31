@@ -15,6 +15,8 @@ public @interface DTOField {
 
 	String dto();
 	String fieldName() default "";
+	boolean relation() default false;
+	boolean nestedRead() default false;
 
 	@Documented
 	@Target(ElementType.FIELD)

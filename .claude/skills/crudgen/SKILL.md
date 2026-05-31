@@ -1,107 +1,175 @@
 ---
 name: crudgen
 description: >-
-  CrudGen annotation processor (io.github.bariskokulu:crudgen) for Spring Boot 3/4.
-  Use when annotating entities or use-case classes, configuring compile-time CRUD/REST
-  generation, RepoType JPA/MONGO/PLAIN, DTOs, JSON Patch, @EndpointGen, security,
-  or lifecycle hooks.
+  CrudGen (io.github.bariskokulu:crudgen) compile-time processor for Spring Boot 3/4.
+  Use for @CrudGen entity CRUD, @DTOField relations, JSON Patch Update DTOs, RepoType
+  JPA/MONGO/PLAIN, @FindBy/@FindAllBy, @EndpointGen use-case HTTP, security and lifecycle hooks.
 ---
 
-# CrudGen library
+# CrudGen
 
-Compile-time annotation processor. You annotate persistence models or application classes; javac emits Spring-ready repositories, services, REST controllers, immutable DTOs, and MapStruct mappers. Artifact: `io.github.bariskokulu:crudgen:1.1.0`. Generated sources: `build/generated/sources/annotationProcessor/java/main/` (Gradle) or Maven equivalent.
+CrudGen is a **compile-time annotation processor**. You annotate persistence models or application classes; javac emits Spring-ready types (repositories, services, REST adapters, immutable DTOs, MapStruct mappers, relation appliers).
 
-**Public API packages**
+**Artifact:** `io.github.bariskokulu:crudgen:1.1.0`  
+**Bytecode:** Java 8 (consumer app JDK and Spring Boot version are independent).
 
-- `com.bariskokulu.crudgen.annotation` — `@CrudGen`, `@EndpointGen`, `@Endpoint`, `@DTOField`
-- `com.bariskokulu.crudgen.annotation.simple` — `@FindBy`, `@FindAllBy`
-- `com.bariskokulu.crudgen.util.RepoType` — `JPA`, `MONGO`, `PLAIN`
-- `com.bariskokulu.crudgen.util.HTTPMethod` — `GET`, `POST`, `PUT`, `PATCH`, `DELETE`
+**Public API**
+
+| Package | Types |
+|---------|--------|
+| `com.bariskokulu.crudgen.annotation` | `@CrudGen`, `@EndpointGen`, `@Endpoint`, `@DTOField` |
+| `com.bariskokulu.crudgen.annotation.simple` | `@FindBy`, `@FindAllBy` |
+| `com.bariskokulu.crudgen.util` | `RepoType`, `HTTPMethod` |
+
+**Generated helper interfaces** (once per compilation when needed)
+
+| Interface | Package | When emitted |
+|-----------|---------|--------------|
+| `CrudGenSecurityService` | `com.bariskokulu.crudgen.security` | Any `@CrudGen` / `@EndpointGen` with `securityService = true` (default) |
+| `EntityLifecycleCallbacks<T>` | `com.bariskokulu.crudgen.lifecycle` | Any `@CrudGen` with `lifecycleHooks = true` (default) |
 
 ---
 
-## Consumer build dependencies
+## Install
 
-| Need | When |
-|------|------|
-| `crudgen` on annotation-processor path | always |
-| Lombok processor (before MapStruct) | if entities use Lombok |
-| MapStruct + `mapstruct-processor` | any entity with non-empty `controllerPath` |
-| Spring Web, Validation, Data JPA or Mongo | typical app; PLAIN-only may omit data store starter |
-| Jackson + zjsonpatch | `"Update"` in `@CrudGen(dtos = …)` |
+### Gradle (Kotlin DSL)
 
-Processor order: **Lombok → MapStruct → CRUDGen**.
+```kotlin
+dependencies {
+    compileOnly("io.github.bariskokulu:crudgen:1.1.0")
+    annotationProcessor("org.projectlombok:lombok:1.18.42")              // if Lombok on entities
+    annotationProcessor("org.mapstruct:mapstruct-processor:1.5.5.Final") // Boot 4: 1.6.3
+    annotationProcessor("io.github.bariskokulu:crudgen:1.1.0")
+}
+```
+
+### Maven
+
+`provided` dependency + `annotationProcessorPaths` in this order: **Lombok → MapStruct → CrudGen**.
+
+### Extra dependencies
+
+| Need | Condition |
+|------|-----------|
+| Spring Web MVC + Validation | HTTP layer |
+| Spring Data JPA or Mongo | `repo = JPA` or `MONGO` |
+| Your repository implementation | `repo = PLAIN` or `customRepo` |
+| MapStruct processor | Non-empty `controllerPath` (DTOs + mapper) |
+| Jackson databind + zjsonpatch | `"Update"` in `@CrudGen(dtos = …)` |
 
 | Stack | MapStruct | zjsonpatch |
 |-------|-----------|------------|
-| Spring Boot 3 / Jackson 2 | 1.5.5.Final | `com.flipkart.zjsonpatch:zjsonpatch:0.4.x` |
-| Spring Boot 4 / Jackson 3 | 1.6.3 | `io.github.vishwakarma:zjsonpatch:0.6.2+` |
+| Spring Boot 3 / Jackson 2 | 1.5.5.Final | `com.flipkart.zjsonpatch:zjsonpatch:0.4.16` |
+| Spring Boot 4 / Jackson 3 | 1.6.3 | `io.github.vishwakarma:zjsonpatch:0.6.2` |
 
-Boot 4 web: `spring-boot-starter-webmvc` (not legacy `starter-web` naming in new apps).
+Boot 4 web: prefer `spring-boot-starter-webmvc`.
 
-Library JAR targets Java 8 bytecode; consumer app JDK is independent.
+Processor order is always **Lombok → MapStruct → CrudGen**.
 
 ---
 
-## @CrudGen — entity CRUD
+## Usage profiles
 
-**Target:** class (`@Entity`, `@Document`, etc.). **Requires** exactly one `@Id` field (Spring Data). ID type drives path variables and batch keys.
+| Profile | Goal | Typical annotations |
+|---------|------|---------------------|
+| **Minimal** | Smallest working REST API | `controllerPath`, `dtos = {Read, Create}`, `securityService = false`, `lifecycleHooks = false`, default `repo = JPA` |
+| **Full** | Every library feature in one app | All `dtos`, relations, batch PATCH, `@FindBy`/`@FindAllBy`, `extend*`, `custom*`, `RepoType` variants, `@EndpointGen`, security + lifecycle on |
 
-### Parameters (all optional unless noted)
+See `docs/EXAMPLES.md` for progressive recipes (minimal → full). Parameter tables: `docs/ANNOTATIONS.md`. Generation rules: `docs/DECISION-TREE.md`.
+
+---
+
+## Capability map (everything the processor can generate)
+
+### Entity layer (`@CrudGen`)
+
+| Capability | How you enable it |
+|------------|-------------------|
+| Spring Data JPA repository | `repo = JPA` (default) |
+| Spring Data Mongo repository | `repo = MONGO` |
+| Plain persistence contract (you implement) | `repo = PLAIN` |
+| Skip generated repository | `customRepo = YourRepo.class` (your bean; no Jpa/Mongo extend required) |
+| Generated service | `service = true` or non-empty `controllerPath` |
+| Skip generated service | `customService = YourService.class` |
+| REST controller + DTOs + MapStruct mapper | `controllerPath = "/api/…"` + `dtos` + `@DTOField` |
+| Skip generated controller | `customController = YourController.class` |
+| Rename generated types / output package | `repositoryName`, `serviceName`, `controllerName`, `packageName` |
+| Extend generated types | `extendRepo`, `extendService`, `extendController` |
+| Immutable JSON DTOs (`Read` / `Create` / `Update`) | `dtos` + `@DTOField` per field |
+| Bean Validation on DTOs | Validation annotations on entity fields (copied) |
+| FK relations in DTO as ids | `@DTOField(relation = true)` |
+| Flatten related Read fields | `@DTOField(relation = true, nestedRead = true)` on scalar ref |
+| `{Entity}RelationApplier` component | Auto when relations exist and generated controller is used |
+| Field query: single result | `@FindBy` |
+| Field query: list + paged | `@FindAllBy` |
+| JSON Patch update | `"Update"` in `dtos` + zjsonpatch on compile classpath |
+| OpenAPI v3 on controller | `openApi = true` (default) |
+| SLF4J debug logging | `logging = true` (default) |
+| Security gate on each endpoint | `securityService = true` (default) |
+| Lifecycle hooks at REST boundary | `lifecycleHooks = true` (default) |
+
+### Use-case layer (`@EndpointGen` + `@Endpoint`)
+
+| Capability | How you enable it |
+|------------|-------------------|
+| HTTP adapter for your `@Component` class | `@EndpointGen(controllerPath = "/api/…")` |
+| Map `HTTPMethod` + path to Spring mapping | `@Endpoint` on methods |
+| Preserve your `@RequestBody` / `@RequestParam` | Existing Spring annotations kept |
+| OpenAPI / logging / security | Same flags as `@EndpointGen` |
+
+### Generated HTTP surface (entity controller)
+
+Base path = `controllerPath`. Responses use **Read DTO** unless noted.
+
+| HTTP | Path | Body / params | Response |
+|------|------|---------------|----------|
+| GET | `/{id}` | path `id` | 200 or **404** |
+| GET | `/` | — | 200 list |
+| GET | `/paged` | `page`, `size` (required) | 200 `Page` |
+| POST | `/` | Create DTO, `@Valid` | **201** |
+| POST | `/batch` | Create DTO list, max **500** | **201** |
+| PATCH | `/{id}` | JSON Patch array, `Content-Type: application/json-patch+json` | 200 or **400** / **404** |
+| PATCH | `/batch` | Map `{ "id": [patch ops…] }`, max **500** keys | 200 or **400** / **404** |
+| DELETE | `/{id}` | — | **204** |
+| DELETE | `/batch` | id list, max **500** | **204** |
+| GET | `/findBy{Field}` | query param = field name | 200 or **404** if null |
+| GET | `/findAllBy{Field}` | query param | 200 list |
+| GET | `/findAllBy{Field}/paged` | query + `page` + `size` | 200 `Page` |
+
+PATCH merges into the **Update DTO shape** (RFC 6902), then validates, maps onto entity, runs relation applier, saves.
+
+---
+
+## @CrudGen
+
+**Target:** class with exactly one `@Id` field (`jakarta.persistence.Id`, `javax.persistence.Id`, or `org.springframework.data.annotation.Id`).
 
 | Parameter | Default | Effect |
 |-----------|---------|--------|
-| `repo` | `JPA` | `JPA` → `JpaRepository` + `JpaSpecificationExecutor`; `MONGO` → `MongoRepository`; `PLAIN` → explicit CRUD interface, no Spring Data supertype |
-| `service` | `false` | Generate `{Entity}Service` when `true` **or** when `controllerPath` is set |
-| `controllerPath` | `""` | Base REST path; **must start with `/`**. Empty → no controller, DTOs, or mapper |
-| `dtos` | `{}` | `"Read"`, `"Create"`, `"Update"`. If `controllerPath` set → **`Read` required** |
-| `repositoryName`, `serviceName`, `controllerName` | `{Entity}*` | Rename generated types |
+| `repo` | `JPA` | `JPA` / `MONGO` / `PLAIN` (see below) |
+| `service` | `false` | Generate `{Entity}Service` when `true` **or** `controllerPath` non-empty |
+| `controllerPath` | `""` | Must start with `/`. Empty → no controller, DTOs, or mapper |
+| `dtos` | `{}` | Only `Read`, `Create`, `Update`. With `controllerPath` → **Read required** |
 | `packageName` | entity package | Output package for generated types |
-| `customRepo` | — | No generated repository; use given `@Repository` class |
-| `customService` | — | No generated service; controller injects this type when HTTP exists |
-| `customController` | — | No generated controller; service/repo/DTOs/mapper still follow rules below |
-| `extendRepo`, `extendService`, `extendController` | — | Generated type extends/implements your interface |
-| `securityService` | `true` | Generated controllers call `CrudGenSecurityService` |
-| `lifecycleHooks` | `true` | Inject `EntityLifecycleCallbacks<T>` into generated controller/service |
-| `logging` | `true` | SLF4J debug logs in generated code |
-| `openApi` | `true` | Swagger v3 annotations on generated controllers (app still needs springdoc for UI) |
+| `repositoryName`, `serviceName`, `controllerName` | `{Entity}*` | Rename generated types |
+| `customRepo` | — | No generated repository; service injects your type. Must **not** extend `JpaRepository`/`MongoRepository` unless you choose to — must expose the same methods as **PLAIN** (below) |
+| `customService` | — | No generated service; controller injects this type |
+| `customController` | — | No generated controller; **incompatible** with `@DTOField(relation=true)` unless you call `{Entity}RelationApplier` yourself |
+| `extendRepo` | — | Generated repo **only** extends this type (must subtype `JpaRepository` / `MongoRepository` for JPA/MONGO) |
+| `extendService`, `extendController` | — | Generated type implements your interface |
+| `securityService` | `true` | Calls `CrudGenSecurityService` from generated controllers |
+| `lifecycleHooks` | `true` | Injects `EntityLifecycleCallbacks<T>` into **generated controller only** |
+| `logging`, `openApi` | `true` | SLF4J debug / Swagger `@Operation` etc. |
 
-### What gets generated
+### RepoType
 
-```
-Repository     always (unless customRepo)
-Service        if service=true OR controllerPath non-empty (unless customService)
-Controller     if controllerPath non-empty (unless customController)
-DTOs + Mapper  if controllerPath non-empty AND Read in dtos AND @DTOField on fields
-PATCH support  if Update in dtos (requires zjsonpatch + Jackson on compile classpath)
-```
+**JPA** — generated interface extends `JpaRepository<E,ID>` + `JpaSpecificationExecutor<E>` (unless `extendRepo` replaces base).
 
-### REST surface (generated controller)
+**MONGO** — extends `MongoRepository<E,ID>` (unless `extendRepo`).
 
-Base = `controllerPath`. All responses use Read DTO unless noted.
+**PLAIN** — `@Repository` interface with `findById`, `findAll`, `findAll(Pageable)`, `save`, `saveAll`, `deleteById`, `deleteAllById`, plus `@FindBy` / `@FindAllBy` methods. **You** provide the implementation.
 
-| HTTP | Path | Notes |
-|------|------|-------|
-| GET | `/{id}` | 404 if missing |
-| GET | `/` | all entities |
-| GET | `/paged?page=&size=` | page ≥ 0, size 1–500 |
-| POST | `/` | Create DTO body → **201 Created** |
-| POST | `/batch` | Create DTO list, max 500 → **201** |
-| PATCH | `/{id}` | `Content-Type: application/json-patch+json`; patches **Update DTO JSON shape** (RFC 6902) |
-| PATCH | `/batch` | JSON map `{ "id": [patch ops…], … }` → **200** |
-| DELETE | `/{id}` | **204** |
-| DELETE | `/batch` | JSON id list → **204** |
-| GET | `/findBy{Field}?{field}=` | from `@FindBy`; **404** if not found |
-| GET | `/findAllBy{Field}?{field}=` | from `@FindAllBy` |
-| GET | `/findAllBy{Field}/paged?…` | paginated `@FindAllBy` |
-
-Generated controller: `@RestController`, `@Validated`, `@RequestMapping(controllerPath)`. Create uses `@Valid` on body; PATCH runs `validator.validate` after merge.
-
-### RepoType.PLAIN
-
-Generated `{Entity}Repository` is a `@Repository` **interface** declaring: `findById`, `findAll`, `findAll(Pageable)`, `save`, `saveAll`, `deleteById`, `deleteAllById`, plus `@FindBy` / `@FindAllBy` methods. **You** implement it (JDBC, jOOQ, MyBatis, R2DBC, etc.). Pagination types: Spring `Page` / `Pageable` from `spring-data-commons`.
-
-With `customRepo`, the processor skips generating the interface and uses your implementation class.
+**`customRepo`** — same method contract as PLAIN on **your** class or interface (Spring bean). Processor does not check Spring Data supertypes. `repo` is ignored for generation when `customRepo` is set; prefer `repo = PLAIN` for clarity. Relation applier calls `findById` on related entities’ `customRepo` types too.
 
 ---
 
@@ -109,99 +177,113 @@ With `customRepo`, the processor skips generating the interface and uses your im
 
 **Target:** entity field. **Repeatable.**
 
-| Attribute | Meaning |
-|-----------|---------|
-| `dto` | `"Read"`, `"Create"`, or `"Update"` |
-| `fieldName` | DTO property name; default = entity field name |
+| Attribute | Default | Effect |
+|-----------|---------|--------|
+| `dto` | — | `Read`, `Create`, or `Update` |
+| `fieldName` | entity name | DTO property name (API/JSON name) |
+| `relation` | `false` | `true`: scalar → `{field}Id`; collection → `{field}Ids` as `List<Long>` (element type needs `@Id`) |
+| `nestedRead` | `false` | With `relation=true` on scalar ref, Read DTO also gets prefixed scalars from related entity’s Read `@DTOField`s |
 
-Only annotated fields appear on that DTO. Bean Validation (`javax.*` / `jakarta.*`) on entity fields is **copied** to generated DTO fields. JPA/Mongo mapping annotations are not copied.
+Only fields with `@DTOField` for that DTO appear on the DTO. Empty DTO name in `dtos` with no fields → compile error.
+
+**Relation flow (Create / Update / PATCH):** MapStruct ignores relation entity fields on write; `{Entity}RelationApplier` loads related rows via `findById` (deduped ids), sets managed references, then `save`. Missing FK → **400**. Related type must be `@CrudGen`.
+
+**`relation = false`:** DTO keeps entity field type (`List<Line>`, embeddable, etc.) — you handle serialization/lazy loading.
 
 ---
 
 ## @FindBy / @FindAllBy
 
-**Target:** entity field. No attributes.
+No attributes. Generate repository + service + HTTP:
 
-- `@FindBy` → `findBy{Field}` in repo/service; GET endpoint as above; single result, 404 when null.
-- `@FindAllBy` → list + paged variants in repo/service/controller.
+- `@FindBy` → `findBy{Field}`; HTTP returns **404** when null (not when multiple DB rows — that is a persistence exception).
+- `@FindAllBy` → list + `findAllBy{Field}Paged` + matching GET endpoints.
 
 ---
 
-## @EndpointGen + @Endpoint — use-case HTTP
+## @EndpointGen + @Endpoint
 
-For **your** `@Component` / service class — not entity CRUD.
-
-**@EndpointGen** (class):
+**@EndpointGen** on a class (your implementation stays the bean):
 
 | Parameter | Default |
 |-----------|---------|
 | `controllerPath` | **required**, starts with `/` |
-| `controllerName` | `{Class}Controller` |
-| `packageName` | class package |
+| `controllerName`, `packageName` | optional rename |
 | `securityService`, `logging`, `openApi` | `true` |
 
-**@Endpoint** (method): `method` = `HTTPMethod.*`, `path` = relative segment starting with `/`.
+**@Endpoint** on methods: `method = HTTPMethod.*`, `path` starts with `/`.
 
-Rules:
+- Each `{token}` in path must match a Java parameter name (or use `@PathVariable("token")`).
+- Non-void → `ResponseEntity.ok(body)`; void → **204**.
+- No entity lifecycle hooks on use-case controllers.
 
-- Each `{name}` in path must match a method parameter name → `@PathVariable` (use explicit `@PathVariable("name")` if compiler lacks `-parameters`).
-- Existing `@RequestBody`, `@RequestParam`, etc. are preserved.
-- Non-void return → `ResponseEntity.ok(…)`; void → **204 No Content**.
-- No `lifecycleHooks` on use-case controllers.
-
-Generated class is HTTP adapter; **your class remains the implementation**.
+Security key: `checkUseAccess("com.example.Ops#methodName", …)`.
 
 ---
 
-## Shared interfaces (app implements)
-
-Emitted **once per compilation** when any annotated type needs them:
-
-### `CrudGenSecurityService` (`com.bariskokulu.crudgen.security`)
-
-When any `@CrudGen` or `@EndpointGen` has `securityService = true` (default):
+## CrudGenSecurityService
 
 ```java
 void checkEntityAccess(String entityClassName, String method, Object... params);
-void checkUseAccess(String method, Object... params);
+void checkUseAccess(String useCaseKey, Object... params);
 ```
 
-- Entity: `entityClassName` = entity FQCN; `method` = generated REST method name (`get`, `create`, `findByEmail`, …).
-- Use-case: `method` = `com.example.JobApi#run`.
+- Entity: `entityClassName` = entity FQCN; `method` = generated method name (`get`, `create`, `findBySku`, …).
+- Use-case: `useCaseKey` = `com.example.JobApi#run`.
 
-If **all** types set `securityService = false`, interface is **not** generated.
+If **every** `@CrudGen` and `@EndpointGen` sets `securityService = false`, the interface is **not** generated.
 
-### `EntityLifecycleCallbacks<T>` (`com.bariskokulu.crudgen.lifecycle`)
+---
 
-When any entity has `lifecycleHooks = true` (default). Injected `@Nullable` into generated controller and service.
+## EntityLifecycleCallbacks&lt;T&gt;
+
+Hooks run on the **generated REST controller** only (not on generated service `delete`).
 
 Implement: `beforeCreate`, `afterCreate`, `beforeUpdate`, `afterUpdate`, `beforeDelete`, `afterDelete`.
 
-Optional defaults (override for batch): `beforeCreateBatch`, `afterCreateBatch`, `beforeUpdateBatch`, `afterUpdateBatch`, `beforeDeleteBatch`, `afterDeleteBatch`.
+Optional batch defaults: `beforeCreateBatch`, `afterCreateBatch`, `beforeUpdateBatch(List<T>)`, `afterUpdateBatch`, `beforeDeleteBatch`, `afterDeleteBatch`.
 
-If **all** entities set `lifecycleHooks = false`, interface is **not** generated.
+**Batch PATCH order:** `beforeUpdateBatch` → per item `beforeUpdate` → patch + relation applier → `saveAll` (one transaction) → per item `afterUpdate` → `afterUpdateBatch`.
+
+If **every** entity sets `lifecycleHooks = false`, interface not generated.
 
 ---
 
 ## MapStruct mapper (when Read DTO exists)
 
-- `get(Entity)` → Read DTO
-- `create(CreateDTO)` → Entity
-- `toPatch(Entity)` → Update DTO
-- `patch(Entity, UpdateDTO)` — merge helper
+| Method | Role |
+|--------|------|
+| `get(Entity)` | Entity → Read DTO |
+| `create(CreateDTO)` | Create DTO → Entity |
+| `toPatch(Entity)` | Entity → Update DTO (patch baseline) |
+| `patch(Entity, UpdateDTO)` | Merge update DTO onto entity (`SET_TO_NULL`) |
 
-Unmapped-property warnings are common with `fieldName` renames or ids omitted from DTOs.
+Relation fields ignored on create/patch mapping; applier sets them after mapping.
+
+Unmapped-property warnings are normal when `id` is omitted from DTOs or `fieldName` renames entity columns.
+
+---
+
+## What CrudGen does not generate
+
+| Topic | Notes |
+|-------|--------|
+| Merge Patch (RFC 7396) | Only JSON Patch (RFC 6902) on Update DTO |
+| JPA join-table business rules | Orphan removal, “role already on other user”, etc. — your service layer |
+| OpenAPI schemas per DTO field | Annotations on operations; not full `@Schema` on every property |
+| `findBy` with multiple DB matches | Spring Data may throw; not converted to 409 |
+| Application code inside your `@Component` | Processor only adds HTTP adapter for `@EndpointGen` |
 
 ---
 
 ## Agent workflow
 
-1. Decide layers: repo-only, service-only, or full HTTP (`controllerPath` + `dtos`).
-2. Mark `@Id` and `@DTOField` per DTO type needed.
-3. Add `@FindBy` / `@FindAllBy` only for query fields you want exposed.
-4. Set `securityService` / `lifecycleHooks` to `false` until app beans exist, or scaffold implementations.
-5. After compile, read generated sources — **do not hand-write duplicate REST/service methods** for generated surface.
-6. PATCH clients: JSON Patch against Update DTO field names, not entity field names when `fieldName` differs.
+1. Choose profile: minimal REST vs full stack (see `docs/EXAMPLES.md`).
+2. Put `@Id` on entity; add `@DTOField` for each DTO type you list in `dtos`.
+3. Add `"Update"` only if zjsonpatch is on the compile classpath.
+4. Set `securityService` / `lifecycleHooks` to `false` until app beans exist, or implement the generated interfaces.
+5. After compile, read `build/generated/sources/annotationProcessor/…` — do not duplicate generated endpoints by hand.
+6. PATCH clients target **Update DTO property names** (after `fieldName`), not internal entity field names.
 
 ---
 
@@ -209,17 +291,23 @@ Unmapped-property warnings are common with `fieldName` renames or ids omitted fr
 
 | Mistake | Fix |
 |---------|-----|
-| `controllerPath` without `"Read"` in `dtos` | add Read + `@DTOField(dto="Read")` |
-| `Update` without zjsonpatch | add dep or remove Update |
-| Missing `CrudGenSecurityService` bean | implement or `securityService=false` everywhere |
+| `controllerPath` without `Read` in `dtos` | Add `Read` + at least one `@DTOField(dto="Read")` |
+| `Update` without zjsonpatch | Add dependency or remove `Update` |
+| No `CrudGenSecurityService` bean | Implement or `securityService=false` on all annotated types |
+| `customController` + `relation=true` | Use generated controller or wire `{Entity}RelationApplier` manually |
+| `extendRepo` that is not a Jpa/Mongo repository | Use marker interface that extends `JpaRepository<E,ID>` etc. |
 | `@PathVariable` without name | `@PathVariable("id")` or `-parameters` |
-| `@Endpoint` path `{id}` but param named differently | names must match |
-| Duplicate custom + generated controller | `customController` replaces generated HTTP entirely for that entity |
+| PATCH wrong property path | Patch `/displayTitle` if DTO uses `fieldName = "displayTitle"` |
 
 ---
 
-## Maintainer note (this repo only)
+## Related docs
 
-Changing processor behavior: run `gradlew verifyAllExamples` after `lib` edits. Sample modules under `samples/` are regression fixtures, not part of the published library API.
+| File | Content |
+|------|---------|
+| `docs/EXAMPLES.md` | Minimal → full usage recipes with code |
+| `docs/ANNOTATIONS.md` | Parameter reference |
+| `docs/DECISION-TREE.md` | Generation decision tree |
+| `docs/TROUBLESHOOTING.md` | Build and runtime failures |
 
-Human docs in repo: `docs/ANNOTATIONS.md`, `docs/DECISION-TREE.md`, `docs/EXAMPLES.md`, `docs/TROUBLESHOOTING.md`.
+Human docs and both agent skills (`.cursor/skills/crudgen/SKILL.md`, `.claude/skills/crudgen/SKILL.md`) must stay in sync when the processor changes.

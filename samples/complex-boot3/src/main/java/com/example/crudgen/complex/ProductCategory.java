@@ -2,8 +2,6 @@ package com.example.crudgen.complex;
 
 import com.bariskokulu.crudgen.annotation.CrudGen;
 import com.bariskokulu.crudgen.annotation.DTOField;
-import com.bariskokulu.crudgen.annotation.simple.FindBy;
-import com.example.crudgen.complex.custom.BespokeItemController;
 
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -16,27 +14,21 @@ import lombok.Setter;
 @Getter
 @Setter
 @CrudGen(
-		controllerPath = "/api/bespoke",
-		customController = BespokeItemController.class,
+		controllerPath = "/api/product-categories",
 		dtos = { "Read", "Create" },
 		securityService = false,
 		lifecycleHooks = false,
-		openApi = true,
-		logging = true
+		openApi = false,
+		logging = false
 )
-public class BespokeItem {
+public class ProductCategory {
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Long id;
 
-	@FindBy
 	@DTOField(dto = "Read")
 	@DTOField(dto = "Create")
-	private String externalKey;
-
-	@DTOField(dto = "Read")
-	@DTOField(dto = "Create")
-	private String payload;
+	private String code;
 
 }

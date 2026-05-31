@@ -1,20 +1,27 @@
-# CRUDGen
+# CrudGen
 
-Compile-time annotation processor for Spring Boot. Annotate an entity or a use-case class; CRUDGen generates repositories, services, REST controllers, DTOs, and MapStruct mappers.
+Compile-time annotation processor for Spring Boot 3 and 4. Annotate a JPA/Mongo entity or a use-case class; CrudGen generates repositories, services, REST controllers, immutable DTOs, and MapStruct mappers.
 
-## What you get
+**Coordinates:** `io.github.bariskokulu:crudgen:1.1.0`  
+**Bytecode:** Java 8 (your app JDK and Spring Boot version are independent).
 
-- **Entity CRUD** — `@CrudGen` on a JPA/Mongo entity (or `RepoType.PLAIN` contract)
-- **Use-case HTTP** — `@EndpointGen` + `@Endpoint` on application services
-- **Queries** — `@FindBy`, `@FindAllBy` on fields
-- **Updates** — JSON Patch (`Update` DTO) with optional batch PATCH
-- **Cross-cutting** — optional security hooks, lifecycle callbacks, OpenAPI annotations, debug logging
+## What the library does
 
-Generated code targets **Java 8** bytecode. Consumer apps run on **Spring Boot 3** (Jackson 2) or **Spring Boot 4** (Jackson 3).
+| Area | Annotations |
+|------|-------------|
+| Entity CRUD | `@CrudGen` on a class with `@Id` |
+| DTOs + validation mirror | `@DTOField` + `dtos = {Read, Create, Update}` |
+| Field queries | `@FindBy`, `@FindAllBy` |
+| JSON Patch updates | `"Update"` in `dtos` + zjsonpatch on compile classpath |
+| FK relations in API | `@DTOField(relation = true)` + `{Entity}RelationApplier` |
+| Persistence backends | `RepoType.JPA`, `MONGO`, `PLAIN` |
+| Custom / extended layers | `customRepo`, `customService`, `customController`, `extend*` |
+| Use-case HTTP | `@EndpointGen` + `@Endpoint` |
+| Cross-cutting | `CrudGenSecurityService`, `EntityLifecycleCallbacks` (optional) |
 
 ## Install
 
-**Gradle**
+**Gradle (Kotlin DSL)**
 
 ```kotlin
 dependencies {
@@ -25,11 +32,9 @@ dependencies {
 }
 ```
 
-**Maven** — `provided` dependency + `annotationProcessorPaths` (Lombok → MapStruct → CRUDGen).
+**Maven** — `provided` dependency + `annotationProcessorPaths`: **Lombok → MapStruct → CrudGen**.
 
-See [Requirements](#requirements) for Spring, MapStruct, and JSON Patch versions.
-
-## Minimal example
+## Minimal usage
 
 ```java
 @Entity
@@ -52,62 +57,42 @@ public class Widget {
 }
 ```
 
-Generates repository, service, controller, `WidgetReadDTO`, `WidgetCreateDTO`, and `WidgetMapper`. Live copy: [`samples/simple-boot3`](samples/simple-boot3).
+Generates repository, service, controller, Read/Create DTOs, and mapper. Step-by-step recipes: [docs/EXAMPLES.md](docs/EXAMPLES.md).
 
 ## Documentation
 
-| Doc | Purpose |
+| Doc | Content |
 |-----|---------|
+| [docs/EXAMPLES.md](docs/EXAMPLES.md) | Minimal → full usage (inline code) |
 | [docs/ANNOTATIONS.md](docs/ANNOTATIONS.md) | Every annotation parameter |
 | [docs/DECISION-TREE.md](docs/DECISION-TREE.md) | What gets generated and when |
-| [docs/EXAMPLES.md](docs/EXAMPLES.md) | Patterns with pointers to sample modules |
-| [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Build/runtime failures |
+| [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Build and runtime failures |
 
-## Sample modules
-
-Four **standalone** Gradle projects under [`samples/`](samples/) — each owns its own sources and tests; Boot 3 and Boot 4 trees are **not** shared or synced.
-
-| Module | Role |
-|--------|------|
-| [simple-boot3](samples/simple-boot3/) | Smallest useful HTTP CRUD |
-| [simple-boot4](samples/simple-boot4/) | Same scenario on Boot 4 |
-| [complex-boot3](samples/complex-boot3/) | Every processor feature + tests |
-| [complex-boot4](samples/complex-boot4/) | Same matrix on Boot 4 |
-
-```bash
-./gradlew verifyAllExamples    # compile + test all four (Windows: gradlew.bat)
-```
-
-Details: [samples/README.md](samples/README.md).
+Agent skills (Cursor + Claude): `.cursor/skills/crudgen/SKILL.md` and `.claude/skills/crudgen/SKILL.md` — keep identical when the processor changes.
 
 ## Requirements
 
-**Consumer project**
+**Your application**
 
-- Java **8+** on the annotation-processor classpath; your app JDK is your choice.
-- Spring Boot **3.2+** or **4.0+** with Web MVC and (for entities) JPA or Mongo **or** `RepoType.PLAIN` + your repository impl.
-- **MapStruct** `1.5.5.Final` (Boot 3) or `1.6.3` (Boot 4).
-- **JSON Patch** only if `Update` is in `dtos`: `zjsonpatch` `0.4.x` (Jackson 2) or `0.6.2+` (Jackson 3). Processor detects Jackson version from the compile classpath.
+- Java **8+** for compiling against the processor; runtime JDK is your choice.
+- Spring Boot **3.2+** or **4.0+** with Web MVC and (for entities) Spring Data JPA or Mongo, or `RepoType.PLAIN` with your repository implementation.
+- **MapStruct** `1.5.5.Final` (Boot 3) or `1.6.3` (Boot 4) when `controllerPath` is set.
+- **JSON Patch** only if `Update` is in `dtos`: zjsonpatch `0.4.x` (Jackson 2) or `0.6.2+` (Jackson 3).
 - Bean Validation: processor mirrors `javax.validation` or `jakarta.validation` from your compile classpath.
 
-**Building this repo**
-
-- Gradle **9.x**, Foojay toolchains.
-- `lib` compiles with JDK **26**, `--release 8`.
-- Sample modules use JDK **21** toolchain, `--release 17`.
+| Stack | Web starter | MapStruct | zjsonpatch (Update DTO) |
+|-------|-------------|-----------|-------------------------|
+| Boot 3 | `spring-boot-starter-web` | 1.5.5.Final | `com.flipkart.zjsonpatch:zjsonpatch:0.4.16` |
+| Boot 4 | `spring-boot-starter-webmvc` | 1.6.3 | `io.github.vishwakarma:zjsonpatch:0.6.2` |
 
 ## Security and lifecycle (optional)
 
-When any annotated type keeps defaults (`securityService = true`, `lifecycleHooks = true`), the processor emits:
+Defaults: `securityService = true`, `lifecycleHooks = true`. The processor may emit:
 
-- `com.bariskokulu.crudgen.security.CrudGenSecurityService` — implement in your app
-- `com.bariskokulu.crudgen.lifecycle.EntityLifecycleCallbacks<T>` — implement before/after hooks
+- `com.bariskokulu.crudgen.security.CrudGenSecurityService`
+- `com.bariskokulu.crudgen.lifecycle.EntityLifecycleCallbacks<T>`
 
-Set both flags to `false` on **all** entities/use-cases if you do not need these interfaces.
-
-## Publishing (maintainers)
-
-`./gradlew :lib:publish` with GPG and Sonatype credentials in `gradle.properties` (see `gradle.properties.example`).
+Implement in your application, or set both flags to `false` on **every** `@CrudGen` / `@EndpointGen` type so the interfaces are not generated.
 
 ## License
 

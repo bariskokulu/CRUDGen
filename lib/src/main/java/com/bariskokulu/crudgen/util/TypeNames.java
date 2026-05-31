@@ -27,6 +27,8 @@ public class TypeNames {
 	public static ClassName VALID = ClassName.bestGuess("jakarta.validation.Valid");
 	public static final ClassName VALIDATED = ClassName.bestGuess("org.springframework.validation.annotation.Validated");
 	public static final ClassName MAPPER = ClassName.bestGuess("org.mapstruct.Mapper");
+	public static final ClassName MAPPING = ClassName.bestGuess("org.mapstruct.Mapping");
+	public static final ClassName MAPPINGS = ClassName.bestGuess("org.mapstruct.Mappings");
 	public static final ClassName BEAN_MAPPING = ClassName.bestGuess("org.mapstruct.BeanMapping");
 	public static final ClassName MAPPING_TARGET = ClassName.bestGuess("org.mapstruct.MappingTarget");
 	public static final ClassName NULL_STRATEGY = ClassName.bestGuess("org.mapstruct.NullValuePropertyMappingStrategy");
@@ -63,7 +65,21 @@ public class TypeNames {
 	public static final ClassName PARAMETER_IN = ClassName.bestGuess("io.swagger.v3.oas.annotations.enums.ParameterIn");
 	public static final ClassName REQUEST_BODY_OPENAPI = ClassName.bestGuess("io.swagger.v3.oas.annotations.parameters.RequestBody");
 
+	public static boolean hasJsonPatchStack(ProcessingEnvironment env) {
+		Elements elements = env.getElementUtils();
+		if (!hasJacksonDatabind(elements) || !hasJacksonJsonNode(elements) || !hasJacksonProcessingException(elements)) {
+			return false;
+		}
+		if (elements.getTypeElement(JSON_PATCH.canonicalName()) == null) {
+			return false;
+		}
+		return elements.getTypeElement(JSON_PATCH_EXCEPTION.canonicalName()) != null;
+	}
+
 	public static boolean validateJsonPatchStack(ProcessingEnvironment env) {
+		if (hasJsonPatchStack(env)) {
+			return true;
+		}
 		Elements elements = env.getElementUtils();
 		if (!hasJacksonDatabind(elements)) {
 			Util.error("Update DTO needs Jackson databind on the compile classpath (e.g. spring-boot-starter-json).", env);

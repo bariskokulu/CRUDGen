@@ -5,6 +5,10 @@ import java.util.Optional;
 
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.lang.model.element.Modifier;
+import javax.lang.model.element.TypeElement;
+import javax.lang.model.type.DeclaredType;
+import javax.lang.model.type.TypeKind;
+import javax.lang.model.type.TypeMirror;
 
 import com.bariskokulu.crudgen.processor.component.EntityElement;
 import com.bariskokulu.crudgen.processor.component.FieldElement;
@@ -21,6 +25,9 @@ public class EntityRepositoryGenerator {
 
 	public static void generate(EntityElement element, ProcessingEnvironment processingEnv) {
 		if(element.getCustomRepoTypeName() != null) return;
+		if (element.getExtendRepoTypeName() != null) {
+			validateExtendRepo(element, processingEnv);
+		}
 		TypeSpec.Builder clazz = TypeSpec.interfaceBuilder(element.getRepositoryName())
 				.addAnnotation(AnnotationSpec.builder(TypeNames.REPOSITORY).build())
 				.addModifiers(Modifier.PUBLIC);
@@ -74,6 +81,55 @@ public class EntityRepositoryGenerator {
 			}
 		}
 		Util.saveFile(element.getPackageName(), clazz.build(), processingEnv);
+	}
+
+	private static void validateExtendRepo(EntityElement element, ProcessingEnvironment processingEnv) {
+		if (element.getRepoType() == com.bariskokulu.crudgen.util.RepoType.PLAIN) {
+			return;
+		}
+		TypeElement extend = processingEnv.getElementUtils()
+				.getTypeElement(element.getExtendRepoTypeName().toString());
+		if (extend == null) {
+			return;
+		}
+		String requiredFqn = element.getRepoType() == com.bariskokulu.crudgen.util.RepoType.MONGO
+				? TypeNames.MONGO_REPOSITORY.canonicalName()
+				: TypeNames.JPA_REPOSITORY.canonicalName();
+		TypeElement required = processingEnv.getElementUtils().getTypeElement(requiredFqn);
+		if (required == null) {
+			return;
+		}
+		if (!declaresSuperinterface(extend, requiredFqn, processingEnv)) {
+			Util.error(element.getName() + ": extendRepo " + element.getExtendRepoTypeName()
+					+ " must extend " + requiredFqn
+					+ ". When extendRepo is set, the generated repository extends only extendRepo (not "
+					+ element.getRepoType() + " defaults).", processingEnv);
+		}
+	}
+
+	private static boolean declaresSuperinterface(TypeElement type, String requiredFqn, ProcessingEnvironment processingEnv) {
+		if (type == null) {
+			return false;
+		}
+		if (requiredFqn.equals(type.getQualifiedName().toString())) {
+			return true;
+		}
+		TypeMirror superClass = type.getSuperclass();
+		if (superClass.getKind() == TypeKind.DECLARED) {
+			TypeElement superType = (TypeElement) ((DeclaredType) superClass).asElement();
+			if (declaresSuperinterface(superType, requiredFqn, processingEnv)) {
+				return true;
+			}
+		}
+		for (TypeMirror iface : type.getInterfaces()) {
+			if (iface.getKind() == TypeKind.DECLARED) {
+				TypeElement ifaceType = (TypeElement) ((DeclaredType) iface).asElement();
+				if (declaresSuperinterface(ifaceType, requiredFqn, processingEnv)) {
+					return true;
+				}
+			}
+		}
+		return false;
 	}
 
 	private static void addPlainPersistenceContract(EntityElement element, TypeSpec.Builder clazz) {

@@ -46,6 +46,7 @@ public class EntityLifecycleCallbacksInterfaceGenerator {
 						.build())
 				.addMethod(MethodSpec.methodBuilder("beforeUpdateBatch")
 						.addModifiers(Modifier.PUBLIC, Modifier.DEFAULT)
+						.addParameter(listOfT, "entities")
 						.build())
 				.addMethod(MethodSpec.methodBuilder("afterUpdateBatch")
 						.addModifiers(Modifier.PUBLIC, Modifier.DEFAULT)

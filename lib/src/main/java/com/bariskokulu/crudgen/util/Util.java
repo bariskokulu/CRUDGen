@@ -3,14 +3,17 @@ package com.bariskokulu.crudgen.util;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.lang.model.element.AnnotationMirror;
-import java.util.Map;
-
 import javax.lang.model.element.Element;
+import javax.lang.model.element.ElementKind;
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.TypeElement;
+import javax.lang.model.type.DeclaredType;
+import javax.lang.model.type.TypeKind;
+import javax.lang.model.type.TypeMirror;
 import javax.tools.Diagnostic;
 
 import com.squareup.javapoet.AnnotationSpec;
@@ -160,6 +163,115 @@ public class Util {
 			return ((TypeElement) type).getQualifiedName().toString();
 		}
 		return "";
+	}
+
+	public static TypeElement toTypeElement(TypeMirror mirror) {
+		if (mirror == null || mirror.getKind() != TypeKind.DECLARED) {
+			return null;
+		}
+		Element element = ((DeclaredType) mirror).asElement();
+		return element instanceof TypeElement ? (TypeElement) element : null;
+	}
+
+	public static boolean hasAnyAnnotation(Element element, String... qualifiedNames) {
+		for (AnnotationMirror mirror : element.getAnnotationMirrors()) {
+			String qn = annotationQualifiedName(mirror);
+			for (String name : qualifiedNames) {
+				if (name.equals(qn)) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	public static boolean isJpaManyToOneOrOneToOne(Element field) {
+		return hasAnyAnnotation(field,
+				"jakarta.persistence.ManyToOne", "javax.persistence.ManyToOne",
+				"jakarta.persistence.OneToOne", "javax.persistence.OneToOne");
+	}
+
+	public static boolean isJpaOneToManyOrManyToMany(Element field) {
+		return hasAnyAnnotation(field,
+				"jakarta.persistence.OneToMany", "javax.persistence.OneToMany",
+				"jakarta.persistence.ManyToMany", "javax.persistence.ManyToMany");
+	}
+
+	public static Element findIdField(TypeElement type) {
+		if (type == null) {
+			return null;
+		}
+		return type.getEnclosedElements().stream()
+				.filter(e -> e.getKind() == ElementKind.FIELD)
+				.filter(e -> hasAnyAnnotation(e,
+						"jakarta.persistence.Id", "javax.persistence.Id",
+						"org.springframework.data.annotation.Id"))
+				.findFirst()
+				.orElse(null);
+	}
+
+	public static TypeMirror idTypeOf(TypeElement type) {
+		Element idField = findIdField(type);
+		return idField != null ? idField.asType() : null;
+	}
+
+	public static String idPropertyName(TypeElement type) {
+		Element idField = findIdField(type);
+		return idField != null ? idField.getSimpleName().toString() : "id";
+	}
+
+	public static String idSourcePath(String entityFieldName, TypeElement relatedType) {
+		return entityFieldName + "." + idPropertyName(relatedType);
+	}
+
+	public static String idGetterExpression(String receiver, TypeElement relatedType) {
+		String prop = idPropertyName(relatedType);
+		return receiver + ".get" + prop.substring(0, 1).toUpperCase() + prop.substring(1) + "()";
+	}
+
+	public static boolean isListType(TypeMirror mirror) {
+		TypeElement raw = toTypeElement(mirror);
+		return raw != null && "java.util.List".equals(raw.getQualifiedName().toString());
+	}
+
+	public static boolean isSetType(TypeMirror mirror) {
+		TypeElement raw = toTypeElement(mirror);
+		return raw != null && "java.util.Set".equals(raw.getQualifiedName().toString());
+	}
+
+	public static TypeMirror collectionElementType(TypeMirror mirror) {
+		if (mirror == null || mirror.getKind() != TypeKind.DECLARED) {
+			return null;
+		}
+		DeclaredType declared = (DeclaredType) mirror;
+		TypeElement raw = toTypeElement(mirror);
+		if (raw == null) {
+			return null;
+		}
+		String qn = raw.getQualifiedName().toString();
+		if (!qn.equals("java.util.List") && !qn.equals("java.util.Set") && !qn.equals("java.util.Collection")) {
+			return null;
+		}
+		if (declared.getTypeArguments().isEmpty()) {
+			return null;
+		}
+		return declared.getTypeArguments().get(0);
+	}
+
+	public static boolean looksLikeEntityReference(TypeMirror mirror, ProcessingEnvironment processingEnv) {
+		TypeElement type = toTypeElement(mirror);
+		if (type == null || type.getKind() != ElementKind.CLASS) {
+			return false;
+		}
+		String qn = type.getQualifiedName().toString();
+		if (qn.startsWith("java.") || qn.startsWith("kotlin.")) {
+			return false;
+		}
+		if (hasAnyAnnotation(type, "jakarta.persistence.Entity", "javax.persistence.Entity",
+				"org.springframework.data.mongodb.core.mapping.Document")) {
+			return true;
+		}
+		return findIdField(type) != null;
 	}
 
 }

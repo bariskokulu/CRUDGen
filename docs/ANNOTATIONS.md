@@ -1,5 +1,7 @@
 # Annotation reference
 
+**Artifact:** `io.github.bariskokulu:crudgen`
+
 Public API:
 
 - `com.bariskokulu.crudgen.annotation` — `@CrudGen`, `@EndpointGen`, `@Endpoint`, `@DTOField`
@@ -22,16 +24,16 @@ Public API:
 | `serviceName` | `String` | `""` | Default `{Entity}Service` |
 | `repositoryName` | `String` | `""` | Default `{Entity}Repository` |
 | `packageName` | `String` | `""` | Output package; default = entity package |
-| `customRepo` | `Class<?>` | `Void` | Skip generated repository; use this implementation |
-| `customController` | `Class<?>` | `Void` | Skip generated controller |
+| `customRepo` | `Class<?>` | `Void` | Skip generated repository; generated service injects this type. **Does not** need to extend `JpaRepository`/`MongoRepository`. Must expose the PLAIN method contract below (register as a Spring bean) |
+| `customController` | `Class<?>` | `Void` | Skip generated controller. Incompatible with `@DTOField(relation=true)` unless you call `{Entity}RelationApplier` yourself |
 | `customService` | `Class<?>` | `Void` | Skip generated service |
-| `extendRepo` | `Class<?>` | `Void` | Generated repository extends this interface |
+| `extendRepo` | `Class<?>` | `Void` | Generated repository **only** extends this type (no extra `JpaRepository`/`MongoRepository`/`PLAIN` methods). `extendRepo` must subtype the `repo` contract (e.g. `JpaRepository<E,ID>` for `JPA`) |
 | `extendService` | `Class<?>` | `Void` | Generated service implements this interface |
 | `extendController` | `Class<?>` | `Void` | Generated controller implements this interface |
 | `securityService` | `boolean` | `true` | Call `CrudGenSecurityService` from generated controllers |
 | `logging` | `boolean` | `true` | SLF4J debug logs in generated code |
 | `openApi` | `boolean` | `true` | Swagger v3 annotations on generated controllers |
-| `lifecycleHooks` | `boolean` | `true` | Inject `EntityLifecycleCallbacks<T>` into generated controller/service |
+| `lifecycleHooks` | `boolean` | `true` | Inject `EntityLifecycleCallbacks<T>` into generated controller (REST boundary only) |
 
 ### ID field
 
@@ -63,6 +65,8 @@ Batch bodies: max **500** items (`@Size` on generated parameters).
 - **JPA** — `JpaRepository<E, ID>` + `JpaSpecificationExecutor<E>`
 - **MONGO** — `MongoRepository<E, ID>`
 - **PLAIN** — `@Repository` interface with explicit `findById`, `findAll`, `findAll(Pageable)`, `save`, `saveAll`, `deleteById`, `deleteAllById`, plus field queries
+
+**`customRepo`** — no generated repository interface. Your class or interface implements the same operations as PLAIN (`findById` returns `Optional<E>`, plus any `@FindBy` / `@FindAllBy` methods). JDBC, MyBatis, in-memory, etc. are fine. `extendRepo` rules apply only when the processor **generates** a repository (no `customRepo`). `{Entity}RelationApplier` injects related entities’ `customRepo` types for `findById`.
 
 ---
 
@@ -108,8 +112,12 @@ Rules:
 |-----------|------|---------|-------------|
 | `dto` | `String` | — | `Read`, `Create`, or `Update` |
 | `fieldName` | `String` | `""` | DTO property name; default = entity field name |
+| `relation` | `boolean` | `false` | `true`: scalar → `{field}Id` in Create/Update/Read; collection → `{field}Ids` as `List<Long>` (or custom `fieldName`). Resolved via `{Entity}RelationApplier` + `findById` before save |
+| `nestedRead` | `boolean` | `false` | Read DTO only: flatten related entity Read `@DTOField` scalars with prefix (e.g. `productCategoryCode`) |
 
 Bean Validation annotations on the entity field are copied to the generated DTO field. Generated controllers use `@Valid` on create/batch bodies; PATCH validates the merged Update DTO.
+
+Related entity types must be `@CrudGen` (repository injected into `{Entity}RelationApplier`). Missing FK → **400**; missing related `@CrudGen` → compile error.
 
 ---
 
@@ -156,7 +164,9 @@ Emitted when **any** entity has `lifecycleHooks = true`.
 
 Abstract: `beforeCreate`, `afterCreate`, `beforeUpdate`, `afterUpdate`, `beforeDelete`, `afterDelete`.
 
-Default no-ops: `beforeCreateBatch`, `afterCreateBatch`, `beforeUpdateBatch`, `afterUpdateBatch`, `beforeDeleteBatch`, `afterDeleteBatch`.
+Default no-ops: `beforeCreateBatch`, `afterCreateBatch`, `beforeUpdateBatch(List<T>)`, `afterUpdateBatch`, `beforeDeleteBatch`, `afterDeleteBatch`.
+
+Batch PATCH: `beforeUpdateBatch` once, then `beforeUpdate` per entity, then `saveAll` (single transaction), then `afterUpdate` per saved entity, then `afterUpdateBatch`.
 
 ---
 

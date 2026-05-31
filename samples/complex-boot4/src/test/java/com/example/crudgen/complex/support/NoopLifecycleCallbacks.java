@@ -3,9 +3,6 @@ package com.example.crudgen.complex.support;
 import com.bariskokulu.crudgen.lifecycle.EntityLifecycleCallbacks;
 import com.example.crudgen.complex.MegaProduct;
 
-import org.springframework.stereotype.Component;
-
-@Component
 public class NoopLifecycleCallbacks implements EntityLifecycleCallbacks<MegaProduct> {
 
 	@Override

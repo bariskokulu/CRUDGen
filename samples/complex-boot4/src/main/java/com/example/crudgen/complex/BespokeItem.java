@@ -18,9 +18,9 @@ import lombok.Setter;
 @CrudGen(
 		controllerPath = "/api/bespoke",
 		customController = BespokeItemController.class,
-		dtos = { "Read", "Create", "Update" },
-		securityService = true,
-		lifecycleHooks = true,
+		dtos = { "Read", "Create" },
+		securityService = false,
+		lifecycleHooks = false,
 		openApi = true,
 		logging = true)
 public class BespokeItem {
@@ -32,12 +32,10 @@ public class BespokeItem {
 	@FindBy
 	@DTOField(dto = "Read")
 	@DTOField(dto = "Create")
-	@DTOField(dto = "Update")
 	private String externalKey;
 
 	@DTOField(dto = "Read")
 	@DTOField(dto = "Create")
-	@DTOField(dto = "Update")
 	private String payload;
 
 }

@@ -77,6 +77,14 @@ public class EntityControllerGenerator {
 					.addStatement("this.lifecycleHooks = lifecycleHooks");
 			clazz.addField(FieldSpec.builder(lifecycleType, "lifecycleHooks", Modifier.PRIVATE, Modifier.FINAL).build());
 		}
+		boolean hasRelationBindings = EntityRelationApplierGenerator.hasRelationBindings(element);
+		ClassName relationApplierType = ClassName.get(element.getPackageName(), element.getName() + "RelationApplier");
+		String relationApplierField = Character.toLowerCase(element.getName().charAt(0)) + element.getName().substring(1) + "RelationApplier";
+		if (hasRelationBindings) {
+			clazz.addField(FieldSpec.builder(relationApplierType, relationApplierField, Modifier.PRIVATE, Modifier.FINAL).build());
+			constructorBuilder.addParameter(relationApplierType, relationApplierField)
+					.addStatement("this.$L = $L", relationApplierField, relationApplierField);
+		}
 		clazz.addMethod(constructorBuilder.build());
 
 		DTOElement readDTO = element.getDtos().get("Read");
@@ -206,7 +214,11 @@ public class EntityControllerGenerator {
 			createMethod.addParameter(createBodyParam.build())
 					.addCode(checkThenAddLog(element, "POST / called with body {}", "body"))
 					.addCode(checkThenAddSecurity(element, "create", "body"))
-					.addStatement("$T draft = mapper.create(body)", element.getTypeName())
+					.addStatement("$T draft = mapper.create(body)", element.getTypeName());
+			if (hasRelationBindings) {
+				createMethod.addStatement("$L.applyForCreate(draft, body)", relationApplierField);
+			}
+			createMethod
 					.addCode(checkThenAddLifeCycleHook(element, "beforeCreate", "draft"))
 					.addStatement("$T created = service.save(draft)", element.getTypeName())
 					.addStatement("$T returnDto = mapper.get(created)", returnDtoTypeName)
@@ -235,10 +247,22 @@ public class EntityControllerGenerator {
 			}
 			createBatchMethod.addParameter(createBatchBodyParam.build())
 					.addCode(checkThenAddLog(element, "POST /batch called with bodies {}", "bodies"))
-					.addCode(checkThenAddSecurity(element, "createBatch", "bodies"))
-					.addStatement("$T drafts = bodies.stream().map(mapper::create).collect($T.toList())", 
-							ParameterizedTypeName.get(ClassName.get(List.class), element.getTypeName()),
-							ClassName.get(Collectors.class))
+					.addCode(checkThenAddSecurity(element, "createBatch", "bodies"));
+			if (hasRelationBindings) {
+				createBatchMethod.addStatement("$T drafts = new $T<>()",
+								ParameterizedTypeName.get(ClassName.get(List.class), element.getTypeName()),
+								ClassName.get(ArrayList.class))
+						.addCode("for ($T body : bodies) {\n", element.getDtos().get("Create").getTypeName())
+						.addStatement("  $T draft = mapper.create(body)", element.getTypeName())
+						.addStatement("  $L.applyForCreate(draft, body)", relationApplierField)
+						.addStatement("  drafts.add(draft)")
+						.addCode("}\n");
+			} else {
+				createBatchMethod.addStatement("$T drafts = bodies.stream().map(mapper::create).collect($T.toList())",
+						ParameterizedTypeName.get(ClassName.get(List.class), element.getTypeName()),
+						ClassName.get(Collectors.class));
+			}
+			createBatchMethod
 					.addCode(batchLifeCycleHook(element, "beforeCreateBatch", "drafts"))
 					.addStatement("$T entities = service.saveAll(drafts)", 
 							ParameterizedTypeName.get(ClassName.get(List.class), element.getTypeName()))
@@ -277,11 +301,15 @@ public class EntityControllerGenerator {
 					.addCode("try {\n")
 					.addStatement("patchedDto = objectMapper.treeToValue($T.apply(body, objectMapper.valueToTree(mapper.toPatch(existing))), $T.class)", TypeNames.JSON_PATCH, dto.getTypeName())
 					.addCode("} catch($T | $T | $T e) {\n", TypeNames.JSON_PROCESSING_EXCEPTION, IllegalArgumentException.class, TypeNames.JSON_PATCH_EXCEPTION)
-					.addStatement("throw new $T(\"Invalid patch\", e)", IllegalArgumentException.class)
+					.addStatement("throw new $T($T.BAD_REQUEST, \"Invalid patch\", e)", TypeNames.RESOURCE_STATUS_EXCEPTION, TypeNames.HTTP_STATUS)
 					.addCode("}\n")
 					.addStatement("$T violations = validator.validate(patchedDto)", ParameterizedTypeName.get(ClassName.get(Set.class), ParameterizedTypeName.get(TypeNames.CONSTRAINT_VIOLATION, dto.getTypeName())))
-					.addStatement("if(!violations.isEmpty()) throw new $T(violations)", TypeNames.CONSTRAINT_EXCEPTION)
-					.addStatement("mapper.patch(existing, patchedDto)")
+					.addStatement("if(!violations.isEmpty()) throw new $T($T.BAD_REQUEST, \"Validation failed\")", TypeNames.RESOURCE_STATUS_EXCEPTION, TypeNames.HTTP_STATUS)
+					.addStatement("mapper.patch(existing, patchedDto)");
+			if (hasRelationBindings) {
+				updateMethod.addStatement("$L.applyForUpdate(existing, patchedDto)", relationApplierField);
+			}
+			updateMethod
 					.addStatement("$T updated = service.save(existing)", element.getTypeName())
 					.addStatement("$T returnDto = mapper.get(updated)", returnDtoTypeName)
 					.addCode(checkThenAddLifeCycleHook(element, "afterUpdate", "updated"))
@@ -313,37 +341,57 @@ public class EntityControllerGenerator {
 			updateBatchMethod.addParameter(updateBatchParam.build())
 					.addCode(checkThenAddLog(element, "PATCH /batch called with patches {}", "patches"))
 					.addCode(checkThenAddSecurity(element, "updateBatch", "patches"))
-					.addCode(checkThenAddLifeCycleHookNoArgs(element, "beforeUpdateBatch"))
-					.addStatement("$T results = new $T<>()", 
-							ParameterizedTypeName.get(ClassName.get(List.class), returnDtoTypeName),
+					.addStatement("$T loaded = new $T<>()", 
+							ParameterizedTypeName.get(ClassName.get(java.util.LinkedHashMap.class), element.getIdTypeName(), element.getTypeName()),
+							ClassName.get(java.util.LinkedHashMap.class))
+					.addCode("for($T<$T, $T> entry : patches.entrySet()) {\n", 
+							ClassName.get(Map.Entry.class), element.getIdTypeName(), TypeNames.JSON_NODE)
+					.addStatement("    $T id = entry.getKey()", element.getIdTypeName())
+					.addStatement("    $T existing = service.get(id)", element.getTypeName())
+					.addStatement("    if(existing == null) throw new $T($T.NOT_FOUND, \"Entity with id \"+ id + \" not found.\")", 
+							TypeNames.RESOURCE_STATUS_EXCEPTION, TypeNames.HTTP_STATUS)
+					.addStatement("    loaded.put(id, existing)")
+					.addCode("}\n")
+					.addStatement("$T toUpdate = new $T<>(loaded.values())", 
+							ParameterizedTypeName.get(ClassName.get(List.class), element.getTypeName()),
 							ClassName.get(ArrayList.class))
-					.addStatement("$T savedForHooks = new $T<>()", 
+					.addCode(batchLifeCycleHook(element, "beforeUpdateBatch", "toUpdate"))
+					.addStatement("$T toSave = new $T<>()", 
 							ParameterizedTypeName.get(ClassName.get(List.class), element.getTypeName()),
 							ClassName.get(ArrayList.class))
 					.addCode("for($T<$T, $T> entry : patches.entrySet()) {\n", 
 							ClassName.get(Map.Entry.class), element.getIdTypeName(), TypeNames.JSON_NODE)
 					.addStatement("    $T id = entry.getKey()", element.getIdTypeName())
 					.addStatement("    $T patch = entry.getValue()", TypeNames.JSON_NODE)
-					.addStatement("    $T existing = service.get(id)", element.getTypeName())
-					.addStatement("    if(existing == null) throw new $T($T.NOT_FOUND, \"Entity with id \"+ id + \" not found.\")", 
-							TypeNames.RESOURCE_STATUS_EXCEPTION, TypeNames.HTTP_STATUS)
+					.addStatement("    $T existing = loaded.get(id)", element.getTypeName())
+					.addCode(checkThenAddLifeCycleHook(element, "beforeUpdate", "existing"))
 					.addStatement("    $T patchedDto", dto.getTypeName())
 					.addCode("    try {\n")
 					.addStatement("        patchedDto = objectMapper.treeToValue($T.apply(patch, objectMapper.valueToTree(mapper.toPatch(existing))), $T.class)", 
 							TypeNames.JSON_PATCH, dto.getTypeName())
 					.addCode("} catch($T | $T | $T e) {\n", TypeNames.JSON_PROCESSING_EXCEPTION, IllegalArgumentException.class, TypeNames.JSON_PATCH_EXCEPTION)
-					.addStatement("        throw new $T(\"Invalid patch for entity \" + id, e)", IllegalArgumentException.class)
+					.addStatement("        throw new $T($T.BAD_REQUEST, \"Invalid patch for entity \" + id, e)", TypeNames.RESOURCE_STATUS_EXCEPTION, TypeNames.HTTP_STATUS)
 					.addCode("    }\n")
 					.addStatement("    $T violations = validator.validate(patchedDto)", 
 							ParameterizedTypeName.get(ClassName.get(Set.class), 
 									ParameterizedTypeName.get(TypeNames.CONSTRAINT_VIOLATION, dto.getTypeName())))
-					.addStatement("    if(!violations.isEmpty()) throw new $T(violations)", TypeNames.CONSTRAINT_EXCEPTION)
-					.addStatement("    mapper.patch(existing, patchedDto)")
-					.addStatement("    $T updated = service.save(existing)", element.getTypeName())
-					.addStatement("    savedForHooks.add(updated)")
-					.addStatement("    results.add(mapper.get(updated))")
+					.addStatement("    if(!violations.isEmpty()) throw new $T($T.BAD_REQUEST, \"Validation failed for entity \" + id)", TypeNames.RESOURCE_STATUS_EXCEPTION, TypeNames.HTTP_STATUS)
+					.addStatement("    mapper.patch(existing, patchedDto)");
+			if (hasRelationBindings) {
+				updateBatchMethod.addStatement("    $L.applyForUpdate(existing, patchedDto)", relationApplierField);
+			}
+			updateBatchMethod
+					.addStatement("    toSave.add(existing)")
 					.addCode("}\n")
-					.addCode(batchLifeCycleHook(element, "afterUpdateBatch", "savedForHooks"))
+					.addStatement("$T saved = service.saveAll(toSave)", 
+							ParameterizedTypeName.get(ClassName.get(List.class), element.getTypeName()))
+					.addCode("for ($T updated : saved) {\n", element.getTypeName())
+					.addCode(checkThenAddLifeCycleHook(element, "afterUpdate", "updated"))
+					.addCode("}\n")
+					.addStatement("$T results = saved.stream().map(mapper::get).collect($T.toList())", 
+							ParameterizedTypeName.get(ClassName.get(List.class), returnDtoTypeName),
+							ClassName.get(Collectors.class))
+					.addCode(batchLifeCycleHook(element, "afterUpdateBatch", "saved"))
 					.addCode(checkThenAddLog(element, "PATCH /batch updated {} entities", "results.size()"))
 					.addStatement("return $T.ok(results)", TypeNames.RESPONSE_ENTITY)
 					.returns(ParameterizedTypeName.get(TypeNames.RESPONSE_ENTITY, 
@@ -493,13 +541,6 @@ public class EntityControllerGenerator {
 			return "";
 		}
 		return "if (lifecycleHooks != null) { lifecycleHooks." + methodName + "(" + argList + "); }\n";
-	}
-
-	public static String checkThenAddLifeCycleHookNoArgs(EntityElement element, String methodName) {
-		if (!element.isLifecycleHooks()) {
-			return "";
-		}
-		return "if (lifecycleHooks != null) { lifecycleHooks." + methodName + "(); }\n";
 	}
 
 	public static String batchLifeCycleHook(EntityElement element, String methodName, String listName) {

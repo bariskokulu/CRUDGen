@@ -6,9 +6,14 @@ import com.bariskokulu.crudgen.annotation.simple.FindAllBy;
 import com.bariskokulu.crudgen.annotation.simple.FindBy;
 
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
+import java.util.List;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -52,5 +57,19 @@ public class MegaProduct {
 	@DTOField(dto = "Create")
 	@DTOField(dto = "Update")
 	private String category;
+
+	@ManyToOne(fetch = FetchType.LAZY)
+	@JoinColumn(name = "product_category_id")
+	@DTOField(dto = "Read", relation = true, nestedRead = true)
+	@DTOField(dto = "Create", relation = true)
+	@DTOField(dto = "Update", relation = true)
+	private ProductCategory productCategory;
+
+	@OneToMany
+	@JoinColumn(name = "mega_product_id")
+	@DTOField(dto = "Read", relation = true)
+	@DTOField(dto = "Create", relation = true)
+	@DTOField(dto = "Update", relation = true)
+	private List<ProductTag> tags;
 
 }

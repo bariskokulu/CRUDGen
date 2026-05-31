@@ -26,16 +26,17 @@ public class EntityDTOGenerator {
 	}
 
 	private static void generateOne(EntityElement element, DTOElement dtoElement, ProcessingEnvironment processingEnv) {
-		TypeNames.init(processingEnv);
-		if (Util.isBlank(element.getControllerPath())) {
+		if (Util.isBlank(element.getControllerPath()) || dtoElement.isInvalid()) {
 			return;
 		}
 		TypeSpec.Builder clazz = TypeSpec.classBuilder(dtoElement.getName())
 				.addModifiers(Modifier.PUBLIC);
 		for (DTOFieldElement f : dtoElement.getFields()) {
-			FieldSpec.Builder field = FieldSpec.builder(ClassName.get(f.getType()), f.getName(), Modifier.PRIVATE, Modifier.FINAL);
-			for (AnnotationSpec validation : Util.beanValidationAnnotationSpecs(f.getElement())) {
-				field.addAnnotation(validation);
+			FieldSpec.Builder field = FieldSpec.builder(f.getTypeName(), f.getName(), Modifier.PRIVATE, Modifier.FINAL);
+			if (!f.isNestedProjection()) {
+				for (AnnotationSpec validation : Util.beanValidationAnnotationSpecs(f.getElement())) {
+					field.addAnnotation(validation);
+				}
 			}
 			clazz.addField(field.build());
 		}
@@ -43,7 +44,7 @@ public class EntityDTOGenerator {
 				.addModifiers(Modifier.PUBLIC)
 				.addAnnotation(TypeNames.JSON_CREATOR);
 		for (DTOFieldElement f : dtoElement.getFields()) {
-			ParameterSpec.Builder param = ParameterSpec.builder(ClassName.get(f.getType()), f.getName())
+			ParameterSpec.Builder param = ParameterSpec.builder(f.getTypeName(), f.getName())
 					.addAnnotation(AnnotationSpec.builder(TypeNames.JSON_PROPERTY)
 							.addMember("value", "$S", f.getName())
 							.build());
@@ -54,7 +55,7 @@ public class EntityDTOGenerator {
 		for (DTOFieldElement f : dtoElement.getFields()) {
 			clazz.addMethod(MethodSpec.methodBuilder("get" + f.getNameCapitalized())
 					.addModifiers(Modifier.PUBLIC)
-					.returns(ClassName.get(f.getType()))
+					.returns(f.getTypeName())
 					.addStatement("return this.$L", f.getName())
 					.build());
 		}

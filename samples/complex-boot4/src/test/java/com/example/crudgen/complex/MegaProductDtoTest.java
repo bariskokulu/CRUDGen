@@ -10,7 +10,7 @@ class MegaProductDtoTest {
 
 	@Test
 	void createDtoUsesFieldNameRemap() {
-		MegaProductCreateDTO dto = new MegaProductCreateDTO("Phone", "SKU-1", "gadgets");
+		MegaProductCreateDTO dto = new MegaProductCreateDTO("Phone", "SKU-1", "gadgets", null, null);
 		assertEquals("Phone", dto.getDisplayTitle());
 	}
 

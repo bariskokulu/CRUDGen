@@ -1,6 +1,6 @@
 # What gets generated
 
-CRUDGen runs at compile time. Use this tree to decide annotations before you write entities.
+CrudGen runs at compile time. Use this tree when choosing annotations before you write entities.
 
 ## `@CrudGen` on an entity
 
@@ -13,11 +13,15 @@ CRUDGen runs at compile time. Use this tree to decide annotations before you wri
 
 Repository
   customRepo specified?
-    └─ YES → use that type; no generated repository interface
+    └─ YES → inject that Spring bean; no generated repository
+              (need not extend Jpa/Mongo; must implement PLAIN CRUD/query methods)
     └─ NO  → generate {Entity}Repository (or repositoryName)
-              repo = JPA   → extends JpaRepository + JpaSpecificationExecutor
-              repo = MONGO → extends MongoRepository
-              repo = PLAIN → @Repository interface with explicit CRUD + query methods
+              extendRepo specified?
+                └─ YES → generated repo extends **only** extendRepo
+                         (must subtype JpaRepository/MongoRepository for JPA/MONGO)
+                └─ NO  → repo = JPA   → JpaRepository + JpaSpecificationExecutor
+                        repo = MONGO → MongoRepository
+                        repo = PLAIN → @Repository interface with explicit CRUD + queries
 
 Service
   customService specified?
@@ -26,28 +30,34 @@ Service
 
 Controller + DTOs + Mapper
   customController specified?
-    └─ YES → no generated controller (service/repo/DTOs/mapper still follow rules below)
+    └─ YES → no generated controller
+              @DTOField(relation=true) → compile error unless you call
+              {Entity}RelationApplier yourself
   controllerPath empty?
     └─ YES → no controller, no DTOs, no mapper
     └─ NO  → generate controller
               require "Read" in dtos
-              generate DTOs listed in dtos (fields need @DTOField per DTO)
+              generate DTOs listed in dtos (@DTOField per DTO per field)
               generate MapStruct mapper when Read DTO exists
 
 Update / JSON Patch
   "Update" in dtos?
-    └─ YES → PATCH /{id} and PATCH /batch; require Jackson + zjsonpatch on classpath
-    └─ NO  → no PATCH endpoints; no ObjectMapper/Validator in controller ctor
+    └─ YES → PATCH /{id} and PATCH /batch; Jackson + zjsonpatch required at compile time
+    └─ NO  → no PATCH endpoints
 
 Field queries
-  @FindBy on field     → findBy{Field} in repo/service; GET …/findBy{Field}
-  @FindAllBy on field  → findAllBy{Field} (+ paged); GET …/findAllBy{Field}[/paged]
+  @FindBy on field     → findBy{Field}; GET …/findBy{Field} (404 if null)
+  @FindAllBy on field  → findAllBy{Field} (+ paged endpoints)
 
-Shared interfaces (once per compilation round)
-  any entity/use-case with securityService=true (default)?
-    └─ YES → generate CrudGenSecurityService
-  any entity with lifecycleHooks=true (default)?
-    └─ YES → generate EntityLifecycleCallbacks<T>
+Relations
+  relation=true → FK ids in DTO; {Entity}RelationApplier + findById before save
+  nestedRead=true (Read, scalar ref) → prefixed scalars from related Read DTO fields
+
+Shared interfaces (once per compilation when needed)
+  any @CrudGen / @EndpointGen with securityService=true (default)?
+    └─ YES → CrudGenSecurityService
+  any @CrudGen with lifecycleHooks=true (default)?
+    └─ YES → EntityLifecycleCallbacks<T>
 ```
 
 ## `@EndpointGen` on a class
@@ -57,16 +67,17 @@ Shared interfaces (once per compilation round)
   └─ NO → nothing
 
 controllerPath set (required)?
-  └─ generate {Class}Controller (or controllerName) under packageName or source package
+  └─ generate {Class}Controller under packageName or source package
 
-For each @Endpoint method:
-  map HTTPMethod → @GetMapping / @PostMapping / …
-  path must start with /
-  each {name} in path must match a method parameter name
-  void return → 204 No Content
-  other returns → 200 OK in ResponseEntity
+Per @Endpoint method:
+  HTTPMethod → Spring mapping annotation
+  path starts with /
+  each {name} in path matches a method parameter name
+  void return → 204
+  other returns → 200 in ResponseEntity
 
-securityService / logging / openApi follow @EndpointGen flags (defaults true)
+securityService / logging / openApi follow @EndpointGen (defaults true)
+No EntityLifecycleCallbacks on use-case controllers
 ```
 
 ## Quick presets
@@ -75,13 +86,11 @@ securityService / logging / openApi follow @EndpointGen flags (defaults true)
 |----------|-------------------|
 | Repository only | `@CrudGen` + `@Id` |
 | Service, no HTTP | `@CrudGen(service = true)` |
-| REST CRUD | `@CrudGen(controllerPath = "/api/x", dtos = {"Read", "Create"})` |
-| + JSON Patch updates | add `"Update"` to `dtos` + zjsonpatch dep |
-| JDBC/MyBatis/etc. | `@CrudGen(repo = PLAIN, customRepo = YourRepo.class)` |
-| MongoDB | `@CrudGen(repo = MONGO, …)` + Spring Data Mongo |
-| Custom REST for entity | `@CrudGen(customController = X.class, controllerPath = "…")` |
-| Use-case API | `@EndpointGen(controllerPath = "/api/…")` + `@Endpoint` on methods |
+| REST CRUD (minimal) | `controllerPath`, `dtos = {Read, Create}`, security/lifecycle off until beans exist |
+| REST + JSON Patch | add `"Update"` to `dtos` + zjsonpatch |
+| JDBC/MyBatis/custom store | `repo = PLAIN`, `customRepo = YourRepo.class` |
+| MongoDB | `repo = MONGO` + Spring Data Mongo |
+| Your REST for entity | `customController = X.class` (mind relations) |
+| Use-case API | `@EndpointGen(controllerPath = "/api/…")` + `@Endpoint` |
 
-Live presets: [samples/simple-boot3](../samples/simple-boot3) (minimal), [samples/complex-boot3](../samples/complex-boot3) (full).
-
-Parameter details: [ANNOTATIONS.md](ANNOTATIONS.md).
+Recipes: [EXAMPLES.md](EXAMPLES.md). Parameters: [ANNOTATIONS.md](ANNOTATIONS.md).

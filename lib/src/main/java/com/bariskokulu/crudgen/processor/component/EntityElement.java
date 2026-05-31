@@ -80,13 +80,22 @@ public class EntityElement extends BaseElement {
 		this.controllerTypeName = !Util.isBlank(controllerPath) ? ClassName.get(packageName, controllerName) : null;
 		Set<String> dtosList = new HashSet<String>();
 		for (String d : annotation.dtos()) {
+			if (!"Read".equals(d) && !"Create".equals(d) && !"Update".equals(d)) {
+				Util.error("Unknown DTO type \"" + d + "\" on entity " + name + "; allowed: Read, Create, Update", processingEnv);
+				setInvalid(true);
+			}
 			dtosList.add(d);
 		}
 		if(!Util.isBlank(controllerPath) && !dtosList.contains("Read")) {
 			Util.error("A \"Read\" DTO is required for entity "+name, processingEnv);
 			setInvalid(true);
 		}
-		this.dtos = dtosList.stream().collect(Collectors.toMap(t -> t, t -> new DTOElement(t, this)));
+		this.dtos = dtosList.stream().collect(Collectors.toMap(t -> t, t -> new DTOElement(t, this, processingEnv)));
+		for (DTOElement dto : this.dtos.values()) {
+			if (dto.isInvalid()) {
+				setInvalid(true);
+			}
+		}
 		
 		TypeName _customRepo = null;
 		try {
@@ -167,6 +176,10 @@ public class EntityElement extends BaseElement {
 
 	public TypeName getControllerServiceTypeName() {
 		return customServiceTypeName != null ? customServiceTypeName : serviceTypeName;
+	}
+
+	public ClassName getEffectiveRepoTypeName() {
+		return customRepoTypeName != null ? (ClassName) customRepoTypeName : repoTypeName;
 	}
 
 }
