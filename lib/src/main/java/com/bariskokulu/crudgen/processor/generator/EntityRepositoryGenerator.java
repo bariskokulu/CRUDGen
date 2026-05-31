@@ -80,7 +80,40 @@ public class EntityRepositoryGenerator {
 						.build());
 			}
 		}
+		if (EntityRelationFetchSupport.useJpaReadGraph(element)) {
+			addJpaReadFetchMethods(element, clazz);
+		}
 		Util.saveFile(element.getPackageName(), clazz.build(), processingEnv);
+	}
+
+	private static void addJpaReadFetchMethods(EntityElement element, TypeSpec.Builder clazz) {
+		AnnotationSpec graph = entityGraphAnnotation(element);
+		ClassName optional = ClassName.get(Optional.class);
+		clazz.addMethod(MethodSpec.methodBuilder("findByIdForRead")
+				.addModifiers(Modifier.PUBLIC, Modifier.ABSTRACT)
+				.addAnnotation(graph)
+				.addParameter(element.getIdTypeName(), "id")
+				.returns(ParameterizedTypeName.get(optional, element.getTypeName()))
+				.build());
+		clazz.addMethod(MethodSpec.methodBuilder("findAllForRead")
+				.addModifiers(Modifier.PUBLIC, Modifier.ABSTRACT)
+				.addAnnotation(graph)
+				.returns(ParameterizedTypeName.get(ClassName.get(List.class), element.getTypeName()))
+				.build());
+		clazz.addMethod(MethodSpec.methodBuilder("findAllForRead")
+				.addModifiers(Modifier.PUBLIC, Modifier.ABSTRACT)
+				.addAnnotation(graph)
+				.addParameter(TypeNames.PAGEABLE, "pageable")
+				.returns(ParameterizedTypeName.get(TypeNames.PAGE, element.getTypeName()))
+				.build());
+	}
+
+	private static AnnotationSpec entityGraphAnnotation(EntityElement element) {
+		AnnotationSpec.Builder builder = AnnotationSpec.builder(TypeNames.ENTITY_GRAPH);
+		for (String path : EntityRelationFetchSupport.readGraphAttributePaths(element)) {
+			builder.addMember("attributePaths", "$S", path);
+		}
+		return builder.build();
 	}
 
 	private static void validateExtendRepo(EntityElement element, ProcessingEnvironment processingEnv) {
@@ -139,6 +172,11 @@ public class EntityRepositoryGenerator {
 				.addModifiers(Modifier.PUBLIC, Modifier.ABSTRACT)
 				.addParameter(element.getIdTypeName(), "id")
 				.returns(ParameterizedTypeName.get(optional, element.getTypeName()))
+				.build());
+		clazz.addMethod(MethodSpec.methodBuilder("findAllById")
+				.addModifiers(Modifier.PUBLIC, Modifier.ABSTRACT)
+				.addParameter(ParameterizedTypeName.get(list, element.getIdTypeName()), "ids")
+				.returns(ParameterizedTypeName.get(list, element.getTypeName()))
 				.build());
 		clazz.addMethod(MethodSpec.methodBuilder("findAll")
 				.addModifiers(Modifier.PUBLIC, Modifier.ABSTRACT)

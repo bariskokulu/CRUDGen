@@ -10,6 +10,8 @@ public interface PlainCustomerRepository {
 
 	Optional<PlainCustomer> findById(Long id);
 
+	List<PlainCustomer> findAllById(Iterable<Long> ids);
+
 	List<PlainCustomer> findAll();
 
 	Page<PlainCustomer> findAll(Pageable pageable);

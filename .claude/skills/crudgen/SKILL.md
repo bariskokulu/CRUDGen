@@ -186,7 +186,9 @@ PATCH merges into the **Update DTO shape** (RFC 6902), then validates, maps onto
 
 Only fields with `@DTOField` for that DTO appear on the DTO. Empty DTO name in `dtos` with no fields → compile error.
 
-**Relation flow (Create / Update / PATCH):** MapStruct ignores relation entity fields on write; `{Entity}RelationApplier` loads related rows via `findById` (deduped ids), sets managed references, then `save`. Missing FK → **400**. Related type must be `@CrudGen`.
+**Relation flow (Create / Update / PATCH):** MapStruct ignores relation entity fields on write. Generated **service** runs `{Entity}RelationApplier` inside `@Transactional` (`prepareCreate`, `prepareCreateAll`, `mergeUpdate`) before `save`. Collections resolve ids via one `findAllById` batch per relation type (not N× `findById`). Missing FK → **400**. Related type must be `@CrudGen`.
+
+**Relation flow (Read / list / paged):** For `repo = JPA` without `customRepo`/`extendRepo`, generated repository adds `@EntityGraph` fetch methods (`findByIdForRead`, `findAllForRead`); service uses them automatically when Read DTO has `relation=true` fields — avoids lazy-load N+1 on list endpoints.
 
 **`relation = false`:** DTO keeps entity field type (`List<Line>`, embeddable, etc.) — you handle serialization/lazy loading.
 

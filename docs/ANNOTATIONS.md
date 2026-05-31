@@ -119,6 +119,8 @@ Bean Validation annotations on the entity field are copied to the generated DTO 
 
 Related entity types must be `@CrudGen` (repository injected into `{Entity}RelationApplier`). Missing FK → **400**; missing related `@CrudGen` → compile error.
 
+**Runtime (generated):** Applier runs in the **service** inside `@Transactional` (`prepareCreate`, `prepareCreateAll`, `mergeUpdate`). Collection relations use `findAllById` batch load. JPA entities with Read `relation=true` get `@EntityGraph` repository methods used by `get` / `getAll` / `getPaged` automatically.
+
 ---
 
 ## @FindBy

@@ -170,18 +170,35 @@ public class EntityRelationApplierGenerator {
 			TypeMirror entityCollectionType = field.getElement().asType();
 			boolean asSet = Util.isSetType(entityCollectionType);
 			ClassName resolvedCollectionType = asSet ? ClassName.get(LinkedHashSet.class) : ClassName.get(ArrayList.class);
+			String idGetter = Util.idGetterExpression("item", related);
 			MethodSpec.Builder method = MethodSpec.methodBuilder("resolve" + cap)
 					.addModifiers(Modifier.PRIVATE)
 					.addParameter(ParameterizedTypeName.get(ClassName.get(List.class), field.getRelationIdTypeName()), "relationIds")
 					.returns(TypeName.get(entityCollectionType));
-			method.addStatement("$T<$T> resolved = new $T<>()", resolvedCollectionType, field.getRelationEntityType(),
-					resolvedCollectionType)
-					.addStatement("$T<$T> seen = new $T<>()", Set.class, field.getRelationIdTypeName(), LinkedHashSet.class)
-					.addCode("for ($T id : relationIds) {\n", field.getRelationIdTypeName())
-					.addStatement("  if (id == null || !seen.add(id)) continue")
-					.addStatement("  resolved.add($L.findById(id).orElseThrow(() -> new $T($T.BAD_REQUEST, \"$L with id \" + id + \" not found.\")))",
-							repoField, TypeNames.RESOURCE_STATUS_EXCEPTION, TypeNames.HTTP_STATUS, label)
-					.addCode("}\n")
+			method.addStatement("$T<$T> uniqueIds = new $T<>()", LinkedHashSet.class, field.getRelationIdTypeName(), LinkedHashSet.class)
+					.beginControlFlow("for ($T id : relationIds)", field.getRelationIdTypeName())
+					.beginControlFlow("if (id != null)")
+					.addStatement("uniqueIds.add(id)")
+					.endControlFlow()
+					.endControlFlow()
+					.addStatement("$T<$T, $T> loaded = new $T<>()", ClassName.get(java.util.HashMap.class),
+							field.getRelationIdTypeName(), field.getRelationEntityType(), ClassName.get(java.util.HashMap.class))
+					.beginControlFlow("for ($T item : $L.findAllById(uniqueIds))", field.getRelationEntityType(), repoField)
+					.addStatement("loaded.put($L, item)", idGetter)
+					.endControlFlow()
+					.addStatement("$T<$T> resolved = new $T<>()", resolvedCollectionType, field.getRelationEntityType(),
+							resolvedCollectionType)
+					.beginControlFlow("for ($T id : relationIds)", field.getRelationIdTypeName())
+					.beginControlFlow("if (id == null)")
+					.addStatement("continue")
+					.endControlFlow()
+					.addStatement("$T item = loaded.get(id)", field.getRelationEntityType())
+					.beginControlFlow("if (item == null)")
+					.addStatement("throw new $T($T.BAD_REQUEST, \"$L with id \" + id + \" not found.\")",
+							TypeNames.RESOURCE_STATUS_EXCEPTION, TypeNames.HTTP_STATUS, label)
+					.endControlFlow()
+					.addStatement("resolved.add(item)")
+					.endControlFlow()
 					.addStatement("return resolved");
 			return method.build();
 		}

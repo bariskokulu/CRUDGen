@@ -36,6 +36,7 @@ public class TypeNames {
 	public static final ClassName JPA_REPOSITORY = ClassName.bestGuess("org.springframework.data.jpa.repository.JpaRepository");
 	public static final ClassName MONGO_REPOSITORY = ClassName.bestGuess("org.springframework.data.mongodb.repository.MongoRepository");
 	public static final ClassName JPA_SPEC_EXECUTOR = ClassName.bestGuess("org.springframework.data.jpa.repository.JpaSpecificationExecutor");
+	public static final ClassName ENTITY_GRAPH = ClassName.bestGuess("org.springframework.data.jpa.repository.EntityGraph");
 	public static final ClassName PAGE = ClassName.bestGuess("org.springframework.data.domain.Page");
 	public static final ClassName PAGEABLE = ClassName.bestGuess("org.springframework.data.domain.Pageable");
 	public static final ClassName SERVICE = ClassName.bestGuess("org.springframework.stereotype.Service");

@@ -78,13 +78,6 @@ public class EntityControllerGenerator {
 			clazz.addField(FieldSpec.builder(lifecycleType, "lifecycleHooks", Modifier.PRIVATE, Modifier.FINAL).build());
 		}
 		boolean hasRelationBindings = EntityRelationApplierGenerator.hasRelationBindings(element);
-		ClassName relationApplierType = ClassName.get(element.getPackageName(), element.getName() + "RelationApplier");
-		String relationApplierField = Character.toLowerCase(element.getName().charAt(0)) + element.getName().substring(1) + "RelationApplier";
-		if (hasRelationBindings) {
-			clazz.addField(FieldSpec.builder(relationApplierType, relationApplierField, Modifier.PRIVATE, Modifier.FINAL).build());
-			constructorBuilder.addParameter(relationApplierType, relationApplierField)
-					.addStatement("this.$L = $L", relationApplierField, relationApplierField);
-		}
 		clazz.addMethod(constructorBuilder.build());
 
 		DTOElement readDTO = element.getDtos().get("Read");
@@ -201,6 +194,9 @@ public class EntityControllerGenerator {
 			MethodSpec.Builder createMethod = MethodSpec.methodBuilder("create")
 					.addModifiers(Modifier.PUBLIC)
 					.addAnnotation(AnnotationSpec.builder(TypeNames.POST_MAPPING).build());
+			if (hasRelationBindings) {
+				createMethod.addAnnotation(TypeNames.TRANSACTIONAL);
+			}
 			addOpenApiMethodDocs(element, createMethod,
 					"Create new " + element.getName(),
 					"Creates a new " + element.getName() + " entity",
@@ -213,10 +209,11 @@ public class EntityControllerGenerator {
 			}
 			createMethod.addParameter(createBodyParam.build())
 					.addCode(checkThenAddLog(element, "POST / called with body {}", "body"))
-					.addCode(checkThenAddSecurity(element, "create", "body"))
-					.addStatement("$T draft = mapper.create(body)", element.getTypeName());
+					.addCode(checkThenAddSecurity(element, "create", "body"));
 			if (hasRelationBindings) {
-				createMethod.addStatement("$L.applyForCreate(draft, body)", relationApplierField);
+				createMethod.addStatement("$T draft = service.prepareCreate(body)", element.getTypeName());
+			} else {
+				createMethod.addStatement("$T draft = mapper.create(body)", element.getTypeName());
 			}
 			createMethod
 					.addCode(checkThenAddLifeCycleHook(element, "beforeCreate", "draft"))
@@ -232,6 +229,9 @@ public class EntityControllerGenerator {
 							.addMember("value", "$S", "/batch")
 							.build())
 					.addModifiers(Modifier.PUBLIC);
+			if (hasRelationBindings) {
+				createBatchMethod.addAnnotation(TypeNames.TRANSACTIONAL);
+			}
 			addOpenApiMethodDocs(element, createBatchMethod,
 					"Create multiple " + element.getName() + "s",
 					"Creates multiple " + element.getName() + " entities",
@@ -249,14 +249,8 @@ public class EntityControllerGenerator {
 					.addCode(checkThenAddLog(element, "POST /batch called with bodies {}", "bodies"))
 					.addCode(checkThenAddSecurity(element, "createBatch", "bodies"));
 			if (hasRelationBindings) {
-				createBatchMethod.addStatement("$T drafts = new $T<>()",
-								ParameterizedTypeName.get(ClassName.get(List.class), element.getTypeName()),
-								ClassName.get(ArrayList.class))
-						.addCode("for ($T body : bodies) {\n", element.getDtos().get("Create").getTypeName())
-						.addStatement("  $T draft = mapper.create(body)", element.getTypeName())
-						.addStatement("  $L.applyForCreate(draft, body)", relationApplierField)
-						.addStatement("  drafts.add(draft)")
-						.addCode("}\n");
+				createBatchMethod.addStatement("$T drafts = service.prepareCreateAll(bodies)",
+						ParameterizedTypeName.get(ClassName.get(List.class), element.getTypeName()));
 			} else {
 				createBatchMethod.addStatement("$T drafts = bodies.stream().map(mapper::create).collect($T.toList())",
 						ParameterizedTypeName.get(ClassName.get(List.class), element.getTypeName()),
@@ -281,6 +275,9 @@ public class EntityControllerGenerator {
 			MethodSpec.Builder updateMethod = MethodSpec.methodBuilder("update")
 					.addModifiers(Modifier.PUBLIC)
 					.addAnnotation(AnnotationSpec.builder(TypeNames.PATCH_MAPPING).addMember("value", "$S", "/{id}").addMember("consumes", "$S", "application/json-patch+json").build());
+			if (hasRelationBindings) {
+				updateMethod.addAnnotation(TypeNames.TRANSACTIONAL);
+			}
 			addOpenApiMethodDocs(element, updateMethod,
 					"Update " + element.getName() + " by ID",
 					"Updates a " + element.getName() + " entity by its ID using JSON Patch",
@@ -304,13 +301,14 @@ public class EntityControllerGenerator {
 					.addStatement("throw new $T($T.BAD_REQUEST, \"Invalid patch\", e)", TypeNames.RESOURCE_STATUS_EXCEPTION, TypeNames.HTTP_STATUS)
 					.addCode("}\n")
 					.addStatement("$T violations = validator.validate(patchedDto)", ParameterizedTypeName.get(ClassName.get(Set.class), ParameterizedTypeName.get(TypeNames.CONSTRAINT_VIOLATION, dto.getTypeName())))
-					.addStatement("if(!violations.isEmpty()) throw new $T($T.BAD_REQUEST, \"Validation failed\")", TypeNames.RESOURCE_STATUS_EXCEPTION, TypeNames.HTTP_STATUS)
-					.addStatement("mapper.patch(existing, patchedDto)");
+					.addStatement("if(!violations.isEmpty()) throw new $T($T.BAD_REQUEST, \"Validation failed\")", TypeNames.RESOURCE_STATUS_EXCEPTION, TypeNames.HTTP_STATUS);
 			if (hasRelationBindings) {
-				updateMethod.addStatement("$L.applyForUpdate(existing, patchedDto)", relationApplierField);
+				updateMethod.addStatement("$T updated = service.mergeUpdate(existing, patchedDto)", element.getTypeName());
+			} else {
+				updateMethod.addStatement("mapper.patch(existing, patchedDto)")
+						.addStatement("$T updated = service.save(existing)", element.getTypeName());
 			}
 			updateMethod
-					.addStatement("$T updated = service.save(existing)", element.getTypeName())
 					.addStatement("$T returnDto = mapper.get(updated)", returnDtoTypeName)
 					.addCode(checkThenAddLifeCycleHook(element, "afterUpdate", "updated"))
 					.addCode(checkThenAddLog(element, "PATCH /{id} updated entity {}", "returnDto"))
@@ -323,6 +321,9 @@ public class EntityControllerGenerator {
 							.addMember("consumes", "$S", "application/json-patch+json")
 							.build())
 					.addModifiers(Modifier.PUBLIC);
+			if (hasRelationBindings) {
+				updateBatchMethod.addAnnotation(TypeNames.TRANSACTIONAL);
+			}
 			addOpenApiMethodDocs(element, updateBatchMethod,
 					"Update multiple " + element.getName() + "s",
 					"Updates multiple " + element.getName() + " entities using JSON Patch",
@@ -375,16 +376,23 @@ public class EntityControllerGenerator {
 					.addStatement("    $T violations = validator.validate(patchedDto)", 
 							ParameterizedTypeName.get(ClassName.get(Set.class), 
 									ParameterizedTypeName.get(TypeNames.CONSTRAINT_VIOLATION, dto.getTypeName())))
-					.addStatement("    if(!violations.isEmpty()) throw new $T($T.BAD_REQUEST, \"Validation failed for entity \" + id)", TypeNames.RESOURCE_STATUS_EXCEPTION, TypeNames.HTTP_STATUS)
-					.addStatement("    mapper.patch(existing, patchedDto)");
+					.addStatement("    if(!violations.isEmpty()) throw new $T($T.BAD_REQUEST, \"Validation failed for entity \" + id)", TypeNames.RESOURCE_STATUS_EXCEPTION, TypeNames.HTTP_STATUS);
 			if (hasRelationBindings) {
-				updateBatchMethod.addStatement("    $L.applyForUpdate(existing, patchedDto)", relationApplierField);
+				updateBatchMethod.addStatement("    toSave.add(service.mergeUpdate(existing, patchedDto))");
+			} else {
+				updateBatchMethod.addStatement("    mapper.patch(existing, patchedDto)")
+						.addStatement("    toSave.add(existing)");
 			}
 			updateBatchMethod
-					.addStatement("    toSave.add(existing)")
-					.addCode("}\n")
-					.addStatement("$T saved = service.saveAll(toSave)", 
-							ParameterizedTypeName.get(ClassName.get(List.class), element.getTypeName()))
+					.addCode("}\n");
+			if (!hasRelationBindings) {
+				updateBatchMethod.addStatement("$T saved = service.saveAll(toSave)", 
+						ParameterizedTypeName.get(ClassName.get(List.class), element.getTypeName()));
+			} else {
+				updateBatchMethod.addStatement("$T saved = toSave", 
+						ParameterizedTypeName.get(ClassName.get(List.class), element.getTypeName()));
+			}
+			updateBatchMethod
 					.addCode("for ($T updated : saved) {\n", element.getTypeName())
 					.addCode(checkThenAddLifeCycleHook(element, "afterUpdate", "updated"))
 					.addCode("}\n")

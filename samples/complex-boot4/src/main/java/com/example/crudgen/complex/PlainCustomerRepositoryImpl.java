@@ -25,6 +25,18 @@ public class PlainCustomerRepositoryImpl implements PlainCustomerRepository {
 	}
 
 	@Override
+	public List<PlainCustomer> findAllById(Iterable<Long> ids) {
+		List<PlainCustomer> result = new ArrayList<>();
+		for (Long id : ids) {
+			PlainCustomer customer = store.get(id);
+			if (customer != null) {
+				result.add(customer);
+			}
+		}
+		return result;
+	}
+
+	@Override
 	public List<PlainCustomer> findAll() {
 		return new ArrayList<>(store.values());
 	}
