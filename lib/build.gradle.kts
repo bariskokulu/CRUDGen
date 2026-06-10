@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "io.github.bariskokulu"
-version = "1.1.0"
+version = "1.1.1"
 val artifactId = "crudgen"
 
 repositories {
@@ -26,7 +26,7 @@ java {
 }
 
 tasks.withType<JavaCompile>().configureEach {
-    options.release.set(8)
+    options.release.set(17)
 }
 
 signing {

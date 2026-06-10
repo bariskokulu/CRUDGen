@@ -10,8 +10,8 @@ description: >-
 
 CrudGen is a **compile-time annotation processor**. You annotate persistence models or application classes; javac emits Spring-ready types (repositories, services, REST adapters, immutable DTOs, MapStruct mappers, relation appliers).
 
-**Artifact:** `io.github.bariskokulu:crudgen:1.1.0`  
-**Bytecode:** Java 8 (consumer app JDK and Spring Boot version are independent).
+**Artifact:** `io.github.bariskokulu:crudgen:1.1.1`  
+**Bytecode:** Java 17 (consumer app JDK and Spring Boot version are independent).
 
 **Public API**
 
@@ -36,10 +36,10 @@ CrudGen is a **compile-time annotation processor**. You annotate persistence mod
 
 ```kotlin
 dependencies {
-    compileOnly("io.github.bariskokulu:crudgen:1.1.0")
+    compileOnly("io.github.bariskokulu:crudgen:1.1.1")
     annotationProcessor("org.projectlombok:lombok:1.18.42")              // if Lombok on entities
     annotationProcessor("org.mapstruct:mapstruct-processor:1.5.5.Final") // Boot 4: 1.6.3
-    annotationProcessor("io.github.bariskokulu:crudgen:1.1.0")
+    annotationProcessor("io.github.bariskokulu:crudgen:1.1.1")
 }
 ```
 
