@@ -2,6 +2,8 @@
 
 Compile-time annotation processor for Spring Boot 3 and 4. Annotate a JPA/Mongo entity or a use-case class; CrudGen generates repositories, services, REST controllers, immutable DTOs, and MapStruct mappers.
 
+[![Maven Central](https://img.shields.io/maven-central/v/io.github.bariskokulu/crudgen.svg)](https://central.sonatype.com/artifact/io.github.bariskokulu/crudgen)
+
 ## Features
 
 - **Compile-time generation** — The processor runs in the `javac` annotation-processing round and emits plain `.java` sources. No runtime bytecode weaving, no reflection-based code paths in generated controllers or services.
